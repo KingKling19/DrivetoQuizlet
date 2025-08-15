@@ -50,17 +50,16 @@ except Exception as e:
 # Configuration defaults
 # ---------------------------
 DEFAULT_MODEL = "gpt-4o-mini"
-SYSTEM_PROMPT = """You extract high-quality, testable term–definition pairs or big-idea summaries from training slides.
+SYSTEM_PROMPT = """You extract high-quality, testable term–definition pairs or big-idea summaries from military training slides.
 Return ONLY valid JSON (list of objects). No commentary.
 
 Guidelines:
 - Prioritize the main concepts, big ideas, and key takeaways from each slide over isolated words.
 - Include acronyms ONLY if they are explicitly defined or expanded in the provided text; otherwise, assume acronyms are already understood and do not output separate cards for them.
-- Prefer doctrinal phrases, bold/ALL-CAPS titles, and glossary-like lines when they convey an important concept.
-- The definition MUST be fully supported by the provided text (do not invent).
-- Keep definitions concise (1–2 sentences).
-- Skip generic or trivial bullets (e.g., "Objectives", "Agenda", "Summary").
-- If the context is ambiguous, omit the item rather than guessing.
+- Focus on military doctrine, procedures, and tactics that would be tested in Army training.
+- Emphasize key concepts relevant to Army Air Defense Artillery (ADA) Basic Officer Leader Course (BOLC).
+- Include step-by-step procedures, operational concepts, and critical safety information.
+- Prioritize information that supports mission command and tactical decision-making.
 
 Output schema:
 [{"term": str, "definition": str, "source_slide": int, "confidence": float}]
