@@ -29,12 +29,15 @@ For comprehensive understanding of this project, AI agents should read documenta
 ## Current Contents
 
 ### 02-technical-guides/
-- `GOOGLE_DRIVE_AUTOMATION.md` - Google Drive integration and automation setup
-- `README_LESSON_ORGANIZATION.md` - Lesson structure and organization system
+- `Google_Drive_Integration_Guide.md` - Google Drive integration and automation setup
+- `Lesson_Organization_System.md` - Lesson structure and organization system
 
 ### 03-performance-analysis/
-- `FILE_COPYING_PERFORMANCE.md` - File operation performance analysis
-- `PERFORMANCE_OPTIMIZATIONS.md` - System optimization strategies and results
+- `File_Operations_Performance_Analysis.md` - File operation performance analysis
+- `System_Performance_Optimizations.md` - System optimization strategies and results
+
+### 04-features/
+- `Cross_Lesson_Context_System_Design.md` - Technical plan for cross-lesson context enhancement
 
 ### Lesson-Specific Documentation
 Lesson READMEs remain in their respective lesson directories:
