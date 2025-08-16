@@ -20,10 +20,10 @@ from collections import Counter
 
 # Import existing modules
 try:
-    from convert_folder_to_quizlet import dedupe_and_filter, canonical_term
-    from flashcard_quality_assessor import FlashcardQualityAssessor
-    from flashcard_clustering import FlashcardClusterer
-    from flashcard_optimizer import FlashcardOptimizer
+    from src.processing.convert_folder_to_quizlet import dedupe_and_filter, canonical_term
+    from src.analysis.flashcard_quality_assessor import FlashcardQualityAssessor
+    from src.analysis.flashcard_clustering import FlashcardClusterer
+    from src.processing.flashcard_optimizer import FlashcardOptimizer
 except ImportError as e:
     logging.warning(f"Could not import some modules: {e}")
 

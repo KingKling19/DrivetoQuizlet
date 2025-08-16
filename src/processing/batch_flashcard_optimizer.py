@@ -16,11 +16,11 @@ import threading
 
 # Import existing modules
 try:
-    from flashcard_optimizer import FlashcardOptimizer
-    from flashcard_review_interface import FlashcardReviewInterface
-    from performance_monitor import performance_monitor
-    from cross_lesson_analyzer import CrossLessonAnalyzer
-    from model_manager import model_manager
+    from src.processing.flashcard_optimizer import FlashcardOptimizer
+    from src.web.flashcard_review_interface import FlashcardReviewInterface
+    from src.analysis.performance_monitor import performance_monitor
+    from src.data.cross_lesson_analyzer import CrossLessonAnalyzer
+    from src.data.model_manager import model_manager
 except ImportError as e:
     print(f"Warning: Could not import some modules: {e}")
 

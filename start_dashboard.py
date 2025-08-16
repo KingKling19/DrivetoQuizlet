@@ -68,7 +68,7 @@ def start_server(host='localhost', port=8000, reload=True):
         # Import and run the server
         import uvicorn
         uvicorn.run(
-            "scripts.web_dashboard:app",
+            "src.web.web_dashboard:app",
             host=host,
             port=port,
             reload=reload,

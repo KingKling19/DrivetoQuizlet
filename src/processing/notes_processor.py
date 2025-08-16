@@ -89,7 +89,7 @@ class NotesProcessor:
         # Lazy load OCR reader only when needed
         if self.reader is None:
             try:
-                from model_manager import model_manager
+                from src.data.model_manager import model_manager
                 self.reader = model_manager.get_ocr_reader(['en'], self.use_gpu)
             except ImportError:
                 # Fallback to direct loading if model manager not available

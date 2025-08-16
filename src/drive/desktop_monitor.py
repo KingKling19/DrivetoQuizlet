@@ -69,7 +69,7 @@ class DesktopMonitor:
         """Manually trigger a drive scan"""
         try:
             # Import and run the drive monitor scan
-            from drive_monitor import DriveMonitor
+            from src.drive.drive_monitor import DriveMonitor
             monitor = DriveMonitor()
             new_files = monitor.scan_all_folders()
             
@@ -125,7 +125,7 @@ class DesktopMonitor:
     
     def run_monitor_loop(self):
         """Run the monitoring loop"""
-        from drive_monitor import DriveMonitor
+        from src.drive.drive_monitor import DriveMonitor
         monitor = DriveMonitor()
         
         while self.running:

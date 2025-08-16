@@ -128,7 +128,7 @@ class AudioProcessor:
         """Load the Whisper model using the model manager."""
         if self.model is None:
             try:
-                from model_manager import model_manager
+                from src.data.model_manager import model_manager
                 self.model = model_manager.get_whisper_model(self.model_size, self.use_gpu)
             except ImportError:
                 # Fallback to direct loading if model manager not available

@@ -63,7 +63,7 @@ def main():
         print(f"{'='*60}")
         
         try:
-            from process_lesson import LessonProcessor
+            from src.processing.process_lesson import LessonProcessor
             processor = LessonProcessor()
             success = processor.process_lesson(lesson_dir)
             

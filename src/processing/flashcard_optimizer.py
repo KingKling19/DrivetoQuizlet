@@ -18,9 +18,9 @@ from pathlib import Path
 
 # Import integration modules
 try:
-    from scripts.model_manager import ModelManager
-    from scripts.performance_monitor import performance_monitor
-    from scripts.cross_lesson_analyzer import CrossLessonAnalyzer
+    from src.data.model_manager import ModelManager
+    from src.analysis.performance_monitor import performance_monitor
+    from src.data.cross_lesson_analyzer import CrossLessonAnalyzer
 except ImportError as e:
     print(f"Warning: Could not import integration modules: {e}")
     model_manager = None
