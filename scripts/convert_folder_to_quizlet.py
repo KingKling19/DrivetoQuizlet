@@ -31,7 +31,9 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import pickle
+import numpy as np
 
 try:
     from openai import OpenAI
@@ -61,6 +63,8 @@ Guidelines:
 - Keep definitions concise (1–2 sentences).
 - Skip generic or trivial bullets (e.g., "Objectives", "Agenda", "Summary").
 - If the context is ambiguous, omit the item rather than guessing.
+- Use cross-lesson context to enhance understanding and avoid duplicate definitions.
+- Consider related concepts from other lessons when creating definitions.
 
 Output schema:
 [{"term": str, "definition": str, "source_slide": int, "confidence": float}]
@@ -68,6 +72,15 @@ Output schema:
 
 SKIP_TITLES = {"objectives", "agenda", "summary", "references", "q&a", "questions"}
 MIN_DEF_LEN = 12
+
+# Cross-lesson context configuration
+CONTEXT_CONFIG = {
+    "max_related_lessons": 3,
+    "context_weight_threshold": 0.3,
+    "max_context_length": 2000,
+    "include_prerequisites": True,
+    "include_related_concepts": True
+}
 
 
 # ---------------------------
@@ -141,7 +154,7 @@ def slide_windows(slides_ctx: List[Dict[str, Any]], window: int = 3) -> List[Lis
     return chunks
 
 
-def build_prompt(chunk: List[Dict[str, Any]]) -> str:
+def build_prompt(chunk: List[Dict[str, Any]], cross_lesson_context: str = "") -> str:
     parts = []
     for s in chunk:
         title_line = f"# Slide {s['index']}: {s['title']}".strip()
@@ -152,10 +165,186 @@ def build_prompt(chunk: List[Dict[str, Any]]) -> str:
             parts.append(f"(Notes) {s['notes']}")
         parts.append("")  # spacer
     ctx = "\n".join(parts).strip()
-    return (
-        "Extract term–definition pairs from the following slides. "
-        "Return ONLY JSON (no markdown).\n\nSlides:\n" + ctx
-    )
+    
+    prompt = "Extract term–definition pairs from the following slides. Return ONLY JSON (no markdown)."
+    
+    if cross_lesson_context:
+        prompt += f"\n\nCross-Lesson Context:\n{cross_lesson_context}\n"
+    
+    prompt += f"\n\nSlides:\n{ctx}"
+    return prompt
+
+
+def load_cross_lesson_data(config_dir: Path = Path("config")) -> Dict[str, Any]:
+    """Load cross-lesson analysis data for context enhancement."""
+    data = {
+        "content_index": {},
+        "semantic_embeddings": {},
+        "lesson_relationships": {},
+        "cross_references": {}
+    }
+    
+    try:
+        # Load content index
+        index_file = config_dir / "lesson_content_index.json"
+        if index_file.exists():
+            with open(index_file, 'r', encoding='utf-8') as f:
+                data["content_index"] = json.load(f)
+        
+        # Load semantic embeddings
+        embeddings_file = config_dir / "semantic_embeddings.pkl"
+        if embeddings_file.exists():
+            with open(embeddings_file, 'rb') as f:
+                data["semantic_embeddings"] = pickle.load(f)
+        
+        # Load lesson relationships
+        relationships_file = config_dir / "lesson_relationships_analysis.json"
+        if relationships_file.exists():
+            with open(relationships_file, 'r', encoding='utf-8') as f:
+                data["lesson_relationships"] = json.load(f)
+        
+        # Load cross-references
+        cross_refs_file = config_dir / "cross_references.json"
+        if cross_refs_file.exists():
+            with open(cross_refs_file, 'r', encoding='utf-8') as f:
+                data["cross_references"] = json.load(f)
+        
+        print(f"✓ Loaded cross-lesson data: {len(data['content_index'])} lessons indexed")
+        return data
+    except Exception as e:
+        print(f"⚠️  Could not load cross-lesson data: {e}")
+        return data
+
+
+def get_lesson_id_from_path(pptx_path: Path) -> str:
+    """Extract lesson ID from presentation path."""
+    # Try to find lesson directory in path
+    path_parts = pptx_path.parts
+    for i, part in enumerate(path_parts):
+        if part == "lessons" and i + 1 < len(path_parts):
+            return path_parts[i + 1]
+    
+    # Fallback: use filename without extension
+    return pptx_path.stem
+
+
+def find_related_lessons(lesson_id: str, cross_lesson_data: Dict[str, Any], max_lessons: int = 3) -> List[Dict[str, Any]]:
+    """Find lessons related to the current lesson for context enhancement."""
+    related_lessons = []
+    
+    try:
+        relationships = cross_lesson_data.get("lesson_relationships", {})
+        lesson_rels = relationships.get(lesson_id, {})
+        
+        # Get related lessons - handle both old and new formats
+        related = lesson_rels.get("related_lessons", [])
+        
+        # If related_lessons is a list of strings (old format), convert to new format
+        if related and isinstance(related[0], str):
+            # Old format - convert to new format
+            related_lessons_new = []
+            for rel_id in related:
+                similarity = lesson_rels.get("relationship_scores", {}).get(rel_id, 0.0)
+                related_lessons_new.append({
+                    "lesson_id": rel_id,
+                    "similarity_score": similarity,
+                    "relationship_type": "related",
+                    "related_concepts": []
+                })
+            related = related_lessons_new
+        
+        # Sort by similarity score
+        if related and isinstance(related[0], dict):
+            related.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
+        
+        # Take top related lessons
+        for rel in related[:max_lessons]:
+            if isinstance(rel, dict):
+                related_lesson_id = rel.get("lesson_id")
+                if related_lesson_id and related_lesson_id != lesson_id:
+                    related_lessons.append(rel)
+        
+        return related_lessons
+    except Exception as e:
+        print(f"⚠️  Error finding related lessons: {e}")
+        return []
+
+
+def extract_related_context(related_lessons: List[Dict[str, Any]], cross_lesson_data: Dict[str, Any]) -> str:
+    """Extract relevant context from related lessons."""
+    context_parts = []
+    
+    try:
+        content_index = cross_lesson_data.get("content_index", {})
+        
+        for rel in related_lessons:
+            if not isinstance(rel, dict):
+                continue
+                
+            lesson_id = rel.get("lesson_id")
+            similarity_score = rel.get("similarity_score", 0)
+            related_concepts = rel.get("related_concepts", [])
+            
+            if lesson_id in content_index:
+                lesson_data = content_index[lesson_id]
+                if not isinstance(lesson_data, dict):
+                    continue
+                    
+                lesson_name = lesson_data.get("lesson_name", lesson_id)
+                
+                # Add lesson header
+                context_parts.append(f"## Related Lesson: {lesson_name} (Similarity: {similarity_score:.2f})")
+                
+                # Add key concepts
+                if related_concepts and isinstance(related_concepts, list):
+                    context_parts.append("### Key Related Concepts:")
+                    for concept in related_concepts[:5]:  # Limit to top 5 concepts
+                        context_parts.append(f"- {concept}")
+                
+                # Add content snippets from presentations
+                content_sources = lesson_data.get("content_sources", {})
+                if isinstance(content_sources, dict):
+                    presentations = content_sources.get("presentations", {})
+                    if isinstance(presentations, dict):
+                        for pptx_name, pptx_data in list(presentations.items())[:2]:  # Limit to 2 presentations
+                            if isinstance(pptx_data, dict):
+                                slides = pptx_data.get("slides", [])
+                                if isinstance(slides, list):
+                                    for slide in slides[:3]:  # Limit to 3 slides per presentation
+                                        if isinstance(slide, dict):
+                                            title = slide.get("title", "")
+                                            body = slide.get("body", "")
+                                            if title and body:
+                                                context_parts.append(f"### {title}")
+                                                context_parts.append(body[:300] + "..." if len(body) > 300 else body)
+                
+                context_parts.append("")  # Spacer
+        
+        context = "\n".join(context_parts)
+        
+        # Limit total context length
+        if len(context) > CONTEXT_CONFIG["max_context_length"]:
+            context = context[:CONTEXT_CONFIG["max_context_length"]] + "..."
+        
+        return context
+    except Exception as e:
+        print(f"⚠️  Error extracting related context: {e}")
+        return ""
+
+
+def enhance_with_cross_lesson_context(chunk: List[Dict[str, Any]], pptx_path: Path, cross_lesson_data: Dict[str, Any]) -> str:
+    """Enhance slide content with cross-lesson context."""
+    try:
+        lesson_id = get_lesson_id_from_path(pptx_path)
+        related_lessons = find_related_lessons(lesson_id, cross_lesson_data, CONTEXT_CONFIG["max_related_lessons"])
+        
+        if not related_lessons:
+            return ""
+        
+        return extract_related_context(related_lessons, cross_lesson_data)
+    except Exception as e:
+        print(f"⚠️  Error enhancing with cross-lesson context: {e}")
+        return ""
 
 
 # ---------------------------
@@ -220,43 +409,205 @@ def good_definition(defi: str, min_len: int) -> bool:
 
 
 def canonical_term(t: str) -> str:
+    """Enhanced term normalization with better handling of variations."""
     t = (t or "").strip()
+    # Remove common prefixes/suffixes that don't change meaning
+    t = re.sub(r"^(the|a|an)\s+", "", t.lower())
+    t = re.sub(r"\s+(system|process|procedure|method|technique)$", "", t)
+    # Normalize whitespace and punctuation
     t = re.sub(r"\s+", " ", t)
-    return t.lower()
+    t = re.sub(r"[^\w\s]", "", t)  # Remove punctuation
+    return t.strip()
 
 
 def compact_definition(d: str) -> str:
-    # keep 1–2 sentences
+    """Enhanced definition compression with better sentence selection."""
+    # keep 1–2 sentences, prioritizing complete thoughts
     parts = re.split(r"(?<=[.!?])\s+", d.strip())
-    return " ".join(parts[:2]).strip()
+    if len(parts) <= 2:
+        return " ".join(parts).strip()
+    
+    # Select sentences with more content (longer sentences)
+    scored_parts = [(part, len(part.split())) for part in parts if part.strip()]
+    scored_parts.sort(key=lambda x: x[1], reverse=True)
+    
+    # Take the two most substantial sentences
+    selected = [part for part, _ in scored_parts[:2]]
+    selected.sort(key=lambda x: parts.index(x))  # Maintain original order
+    
+    return " ".join(selected).strip()
 
 
-def dedupe_and_filter(cards: List[Dict[str, Any]], min_def_len: int) -> List[Dict[str, Any]]:
-    best: Dict[str, Dict[str, Any]] = {}
+def calculate_semantic_similarity(text1: str, text2: str) -> float:
+    """Calculate semantic similarity between two texts using simple word overlap."""
+    if not text1 or not text2:
+        return 0.0
+    
+    # Normalize texts
+    text1_words = set(re.findall(r'\b\w+\b', text1.lower()))
+    text2_words = set(re.findall(r'\b\w+\b', text2.lower()))
+    
+    if not text1_words or not text2_words:
+        return 0.0
+    
+    # Calculate Jaccard similarity
+    intersection = len(text1_words & text2_words)
+    union = len(text1_words | text2_words)
+    
+    return intersection / union if union > 0 else 0.0
+
+
+def calculate_fuzzy_similarity(term1: str, term2: str) -> float:
+    """Calculate fuzzy similarity between terms using Levenshtein distance."""
+    if not term1 or not term2:
+        return 0.0
+    
+    # Simple implementation - can be enhanced with proper Levenshtein
+    term1_norm = canonical_term(term1)
+    term2_norm = canonical_term(term2)
+    
+    if term1_norm == term2_norm:
+        return 1.0
+    
+    # Calculate character-level similarity
+    max_len = max(len(term1_norm), len(term2_norm))
+    if max_len == 0:
+        return 0.0
+    
+    # Simple character overlap
+    common_chars = sum(1 for c in term1_norm if c in term2_norm)
+    return common_chars / max_len
+
+
+def is_duplicate_flashcard(card1: Dict[str, Any], card2: Dict[str, Any], config: Dict[str, Any]) -> bool:
+    """Enhanced duplicate detection using multiple similarity metrics."""
+    term1 = card1.get("term", "").strip()
+    term2 = card2.get("term", "").strip()
+    def1 = card1.get("definition", "").strip()
+    def2 = card2.get("definition", "").strip()
+    
+    if not term1 or not term2:
+        return False
+    
+    # 1. Exact term match
+    if canonical_term(term1) == canonical_term(term2):
+        return True
+    
+    # 2. Fuzzy term similarity
+    fuzzy_threshold = config.get("fuzzy_match_threshold", 0.3)
+    if calculate_fuzzy_similarity(term1, term2) > fuzzy_threshold:
+        return True
+    
+    # 3. Semantic similarity (if terms are similar and definitions are very similar)
+    semantic_threshold = config.get("semantic_similarity_threshold", 0.85)
+    term_similarity = calculate_fuzzy_similarity(term1, term2)
+    def_similarity = calculate_semantic_similarity(def1, def2)
+    
+    if term_similarity > 0.5 and def_similarity > semantic_threshold:
+        return True
+    
+    return False
+
+
+def select_best_duplicate(card1: Dict[str, Any], card2: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+    """Select the better flashcard when duplicates are found."""
+    conf1 = float(card1.get("confidence", 0.0) or 0.0)
+    conf2 = float(card2.get("confidence", 0.0) or 0.0)
+    
+    # Compare confidence scores
+    if abs(conf1 - conf2) > 0.1:
+        return card1 if conf1 > conf2 else card2
+    
+    # Compare definition quality (length and structure)
+    def1 = card1.get("definition", "")
+    def2 = card2.get("definition", "")
+    
+    # Prefer longer, more detailed definitions
+    if len(def1) > len(def2) * 1.2:
+        return card1
+    elif len(def2) > len(def1) * 1.2:
+        return card2
+    
+    # Prefer definitions with better structure
+    def1_score = len([s for s in re.split(r'[.!?]+', def1) if len(s.strip().split()) >= 3])
+    def2_score = len([s for s in re.split(r'[.!?]+', def2) if len(s.strip().split()) >= 3])
+    
+    if def1_score != def2_score:
+        return card1 if def1_score > def2_score else card2
+    
+    # Default to first card if all else is equal
+    return card1
+
+
+def dedupe_and_filter(cards: List[Dict[str, Any]], min_def_len: int, config: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """Enhanced duplicate detection and filtering with semantic similarity."""
+    if config is None:
+        config = {
+            "fuzzy_match_threshold": 0.3,
+            "semantic_similarity_threshold": 0.85,
+            "context_weight": 0.2,
+            "confidence_weight": 0.8
+        }
+    
+    # Filter out invalid cards first
+    valid_cards = []
     for c in cards:
         term = (c.get("term") or "").strip()
         defi = (c.get("definition") or "").strip()
-        conf = float(c.get("confidence", 0.0) or 0.0)
-        src = int(c.get("source_slide", 0) or 0)
-
-        if not term or not good_definition(defi, min_def_len):
-            continue
-
-        key = canonical_term(term)
-        old = best.get(key)
-        if (old is None) or (conf > old.get("confidence", 0.0)):
-            best[key] = {
-                "term": term,
-                "definition": compact_definition(defi),
-                "confidence": conf,
-                "source_slide": src,
-            }
-
+        
+        if term and good_definition(defi, min_def_len):
+            valid_cards.append(c)
+    
+    if not valid_cards:
+        return []
+    
+    # Enhanced duplicate detection
+    unique_cards = []
+    processed_terms = set()
+    
+    for i, card in enumerate(valid_cards):
+        term = card.get("term", "").strip()
+        canonical_key = canonical_term(term)
+        
+        # Check if this is a duplicate of any existing card
+        is_duplicate = False
+        best_card = card
+        
+        for existing_card in unique_cards:
+            if is_duplicate_flashcard(card, existing_card, config):
+                is_duplicate = True
+                # Select the better card
+                best_card = select_best_duplicate(card, existing_card, config)
+                
+                # Remove the existing card if it's not the best
+                if best_card != existing_card:
+                    unique_cards.remove(existing_card)
+                    unique_cards.append(best_card)
+                break
+        
+        if not is_duplicate:
+            unique_cards.append(card)
+    
+    # Final processing
+    result = []
+    for card in unique_cards:
+        term = card.get("term", "").strip()
+        defi = card.get("definition", "").strip()
+        conf = float(card.get("confidence", 0.0) or 0.0)
+        src = int(card.get("source_slide", 0) or 0)
+        
+        result.append({
+            "term": term,
+            "definition": compact_definition(defi),
+            "confidence": conf,
+            "source_slide": src,
+        })
+    
     # Sort: source_slide then term
-    return sorted(best.values(), key=lambda x: (x["source_slide"], x["term"].lower()))
+    return sorted(result, key=lambda x: (x["source_slide"], x["term"].lower()))
 
 
-def extract_cards_from_presentation(pptx_path: Path, client: OpenAI, model: str, window: int, max_retries: int, base_sleep: float, min_def_len: int, dry_run: bool, verbose: bool) -> List[Dict[str, Any]]:
+def extract_cards_from_presentation(pptx_path: Path, client: OpenAI, model: str, window: int, max_retries: int, base_sleep: float, min_def_len: int, dry_run: bool, verbose: bool, cross_lesson_data: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     prs = Presentation(str(pptx_path))
     slides_ctx = []
     for idx, slide in enumerate(prs.slides, start=1):
@@ -275,7 +626,14 @@ def extract_cards_from_presentation(pptx_path: Path, client: OpenAI, model: str,
     all_cards: List[Dict[str, Any]] = []
 
     for chunk in chunks:
-        prompt = build_prompt(chunk)
+        # Enhance with cross-lesson context if available
+        cross_lesson_context = ""
+        if cross_lesson_data:
+            cross_lesson_context = enhance_with_cross_lesson_context(chunk, pptx_path, cross_lesson_data)
+            if verbose and cross_lesson_context:
+                print(f"[context] Enhanced chunk with cross-lesson context ({len(cross_lesson_context)} chars)")
+        
+        prompt = build_prompt(chunk, cross_lesson_context)
         if dry_run:
             if verbose:
                 print(f"[dry-run] would call LLM on slides {[c['index'] for c in chunk]}")
@@ -295,7 +653,20 @@ def extract_cards_from_presentation(pptx_path: Path, client: OpenAI, model: str,
         # gentle pacing to play nice with rate limits
         time.sleep(base_sleep)
 
-    return dedupe_and_filter(all_cards, min_def_len=min_def_len)
+    # Load optimization config for enhanced deduplication
+    try:
+        with open("config/flashcard_optimization_config.json", 'r') as f:
+            optimization_config = json.load(f)
+        dedup_config = optimization_config.get("duplicate_detection", {})
+    except FileNotFoundError:
+        dedup_config = {
+            "fuzzy_match_threshold": 0.3,
+            "semantic_similarity_threshold": 0.85,
+            "context_weight": 0.2,
+            "confidence_weight": 0.8
+        }
+    
+    return dedupe_and_filter(all_cards, min_def_len=min_def_len, config=dedup_config)
 
 
 # ---------------------------
@@ -370,6 +741,13 @@ def main():
     else:
         client = None  # type: ignore
 
+    # Load cross-lesson data for context enhancement
+    cross_lesson_data = None
+    if not args.dry_run:
+        cross_lesson_data = load_cross_lesson_data()
+        if args.verbose and cross_lesson_data.get("content_index"):
+            print(f"[context] Loaded cross-lesson data for {len(cross_lesson_data['content_index'])} lessons")
+
     total_estimate = 0.0
     for fp in files:
         if args.verbose:
@@ -411,6 +789,7 @@ def main():
             min_def_len=args.min_def_len,
             dry_run=False,
             verbose=args.verbose,
+            cross_lesson_data=cross_lesson_data,
         )
 
         out_tsv = fp.with_suffix(".quizlet.tsv")

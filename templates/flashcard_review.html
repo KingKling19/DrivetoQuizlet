@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Review Interface - DriveToQuizlet</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .flashcard-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .flashcard-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .flashcard-card.needs-review {
+            border-left: 4px solid #dc3545;
+        }
+        .flashcard-card.duplicate {
+            border-left: 4px solid #ffc107;
+        }
+        .flashcard-card.high-quality {
+            border-left: 4px solid #28a745;
+        }
+        .quality-score {
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .quality-score.excellent { color: #28a745; }
+        .quality-score.good { color: #17a2b8; }
+        .quality-score.fair { color: #ffc107; }
+        .quality-score.poor { color: #dc3545; }
+        .difficulty-badge {
+            font-size: 0.8em;
+            padding: 2px 8px;
+        }
+        .topic-badge {
+            font-size: 0.8em;
+            padding: 2px 8px;
+            background-color: #6c757d;
+            color: white;
+        }
+        .edit-mode {
+            background-color: #f8f9fa;
+        }
+        .suggestions-panel {
+            background-color: #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .statistics-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .cluster-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .progress-bar {
+            height: 8px;
+            border-radius: 4px;
+        }
+        .bulk-actions {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background-color: white;
+            border-bottom: 1px solid #dee2e6;
+            padding: 10px 0;
+        }
+        .flashcard-term {
+            font-weight: bold;
+            color: #495057;
+        }
+        .flashcard-definition {
+            color: #6c757d;
+            line-height: 1.5;
+        }
+        .review-notes {
+            font-style: italic;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="row bg-primary text-white p-3">
+            <div class="col">
+                <h1><i class="fas fa-clipboard-check"></i> Flashcard Review Interface</h1>
+                <p class="mb-0">Lesson: <span id="lesson-name">{{ lesson_id }}</span></p>
+            </div>
+        </div>
+
+        <!-- Bulk Actions -->
+        <div class="bulk-actions">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="select-all">
+                        <label class="form-check-label" for="select-all">
+                            Select All
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="applyBulkOperation('delete')">
+                            <i class="fas fa-trash"></i> Delete Selected
+                        </button>
+                        <button type="button" class="btn btn-outline-warning btn-sm" onclick="applyBulkOperation('merge')">
+                            <i class="fas fa-compress-alt"></i> Merge Selected
+                        </button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="applyBulkOperation('improve_quality')">
+                            <i class="fas fa-magic"></i> Improve Quality
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3 text-end">
+                    <button type="button" class="btn btn-success" onclick="saveChanges()">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Left Panel - Statistics and Filters -->
+            <div class="col-md-3">
+                <!-- Statistics -->
+                <div class="statistics-card">
+                    <h5><i class="fas fa-chart-bar"></i> Statistics</h5>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="h4" id="total-flashcards">0</div>
+                            <small>Total</small>
+                        </div>
+                        <div class="col-6">
+                            <div class="h4" id="reviewed-count">0</div>
+                            <small>Reviewed</small>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <small>Review Progress</small>
+                        <div class="progress">
+                            <div class="progress-bar" id="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <small>Average Quality</small>
+                        <div class="h5" id="avg-quality">0.0</div>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="fas fa-filter"></i> Filters</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Quality Level</label>
+                            <select class="form-select form-select-sm" id="quality-filter">
+                                <option value="">All</option>
+                                <option value="excellent">Excellent (0.8+)</option>
+                                <option value="good">Good (0.6-0.8)</option>
+                                <option value="fair">Fair (0.4-0.6)</option>
+                                <option value="poor">Poor (<0.4)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Difficulty</label>
+                            <select class="form-select form-select-sm" id="difficulty-filter">
+                                <option value="">All</option>
+                                <option value="basic">Basic</option>
+                                <option value="intermediate">Intermediate</option>
+                                <option value="advanced">Advanced</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Topic</label>
+                            <select class="form-select form-select-sm" id="topic-filter">
+                                <option value="">All</option>
+                                <option value="operations">Operations</option>
+                                <option value="communications">Communications</option>
+                                <option value="equipment">Equipment</option>
+                                <option value="procedures">Procedures</option>
+                                <option value="safety">Safety</option>
+                                <option value="leadership">Leadership</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="needs-review-filter">
+                                <label class="form-check-label" for="needs-review-filter">
+                                    Needs Review Only
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="duplicates-filter">
+                                <label class="form-check-label" for="duplicates-filter">
+                                    Duplicates Only
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Suggestions -->
+                <div class="suggestions-panel" id="suggestions-panel" style="display: none;">
+                    <h6><i class="fas fa-lightbulb"></i> Optimization Suggestions</h6>
+                    <div id="suggestions-list"></div>
+                </div>
+            </div>
+
+            <!-- Main Content - Flashcards -->
+            <div class="col-md-9">
+                <!-- Search and Sort -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" class="form-control" id="search-input" placeholder="Search flashcards...">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <select class="form-select" id="sort-select">
+                            <option value="quality">Sort by Quality</option>
+                            <option value="difficulty">Sort by Difficulty</option>
+                            <option value="topic">Sort by Topic</option>
+                            <option value="alphabetical">Sort Alphabetically</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Flashcards Container -->
+                <div id="flashcards-container">
+                    <!-- Flashcards will be loaded here -->
+                </div>
+
+                <!-- Load More Button -->
+                <div class="text-center mt-4" id="load-more-container" style="display: none;">
+                    <button type="button" class="btn btn-outline-primary" onclick="loadMoreFlashcards()">
+                        <i class="fas fa-plus"></i> Load More Flashcards
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Flashcard Modal -->
+    <div class="modal fade" id="editFlashcardModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Flashcard</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-flashcard-form">
+                        <div class="mb-3">
+                            <label class="form-label">Term</label>
+                            <input type="text" class="form-control" id="edit-term" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Definition</label>
+                            <textarea class="form-control" id="edit-definition" rows="4" required></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label class="form-label">Difficulty Level</label>
+                                <select class="form-select" id="edit-difficulty">
+                                    <option value="basic">Basic</option>
+                                    <option value="intermediate">Intermediate</option>
+                                    <option value="advanced">Advanced</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Topic</label>
+                                <select class="form-select" id="edit-topic">
+                                    <option value="operations">Operations</option>
+                                    <option value="communications">Communications</option>
+                                    <option value="equipment">Equipment</option>
+                                    <option value="procedures">Procedures</option>
+                                    <option value="safety">Safety</option>
+                                    <option value="leadership">Leadership</option>
+                                    <option value="general">General</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Quality Score</label>
+                                <input type="number" class="form-control" id="edit-quality" min="0" max="1" step="0.01">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Review Notes</label>
+                            <textarea class="form-control" id="edit-notes" rows="2" placeholder="Add review notes..."></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveFlashcardEdit()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let flashcards = [];
+        let filteredFlashcards = [];
+        let currentEditIndex = -1;
+        let lessonId = '{{ lesson_id }}';
+
+        // Initialize the interface
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFlashcards();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Search functionality
+            document.getElementById('search-input').addEventListener('input', filterFlashcards);
+            
+            // Filter functionality
+            document.getElementById('quality-filter').addEventListener('change', filterFlashcards);
+            document.getElementById('difficulty-filter').addEventListener('change', filterFlashcards);
+            document.getElementById('topic-filter').addEventListener('change', filterFlashcards);
+            document.getElementById('needs-review-filter').addEventListener('change', filterFlashcards);
+            document.getElementById('duplicates-filter').addEventListener('change', filterFlashcards);
+            
+            // Sort functionality
+            document.getElementById('sort-select').addEventListener('change', sortFlashcards);
+            
+            // Select all functionality
+            document.getElementById('select-all').addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.flashcard-checkbox');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+            });
+        }
+
+        async function loadFlashcards() {
+            try {
+                const response = await fetch(`/api/flashcards/${lessonId}/review`);
+                const data = await response.json();
+                
+                flashcards = data.flashcards || [];
+                filteredFlashcards = [...flashcards];
+                
+                updateStatistics(data.summary);
+                displayFlashcards();
+                displaySuggestions(data.suggestions);
+                
+            } catch (error) {
+                console.error('Error loading flashcards:', error);
+                showAlert('Error loading flashcards', 'danger');
+            }
+        }
+
+        function updateStatistics(summary) {
+            document.getElementById('total-flashcards').textContent = summary.total_flashcards || 0;
+            document.getElementById('reviewed-count').textContent = summary.reviewed_count || 0;
+            document.getElementById('avg-quality').textContent = (summary.average_quality_score || 0).toFixed(2);
+            
+            const progress = summary.review_progress || 0;
+            const progressBar = document.getElementById('progress-bar');
+            progressBar.style.width = progress + '%';
+            progressBar.textContent = Math.round(progress) + '%';
+        }
+
+        function displayFlashcards() {
+            const container = document.getElementById('flashcards-container');
+            container.innerHTML = '';
+
+            if (filteredFlashcards.length === 0) {
+                container.innerHTML = '<div class="text-center text-muted mt-5"><i class="fas fa-inbox fa-3x"></i><p class="mt-3">No flashcards found</p></div>';
+                return;
+            }
+
+            filteredFlashcards.forEach((flashcard, index) => {
+                const card = createFlashcardCard(flashcard, index);
+                container.appendChild(card);
+            });
+        }
+
+        function createFlashcardCard(flashcard, index) {
+            const card = document.createElement('div');
+            card.className = `flashcard-card card ${getCardClass(flashcard)}`;
+            
+            const qualityScore = flashcard.quality_score || 0;
+            const qualityClass = getQualityClass(qualityScore);
+            
+            card.innerHTML = `
+                <div class="card-body">
+                    <div class="row align-items-start">
+                        <div class="col-md-1">
+                            <div class="form-check">
+                                <input class="form-check-input flashcard-checkbox" type="checkbox" value="${flashcard.id}">
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="flashcard-term">${flashcard.term}</div>
+                            <div class="flashcard-definition mt-2">${flashcard.definition}</div>
+                            ${flashcard.review_notes ? `<div class="review-notes mt-2"><i class="fas fa-sticky-note"></i> ${flashcard.review_notes}</div>` : ''}
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <span class="quality-score ${qualityClass}">${(qualityScore * 100).toFixed(0)}%</span>
+                                    <span class="badge difficulty-badge bg-${getDifficultyColor(flashcard.difficulty_level)}">${flashcard.difficulty_level}</span>
+                                    <span class="badge topic-badge">${flashcard.topic}</span>
+                                </div>
+                                <div class="btn-group-vertical btn-group-sm">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="editFlashcard(${index})">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm" onclick="deleteFlashcard(${index})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+
+        function getCardClass(flashcard) {
+            if (flashcard.needs_review) return 'needs-review';
+            if (flashcard.is_duplicate) return 'duplicate';
+            if ((flashcard.quality_score || 0) > 0.8) return 'high-quality';
+            return '';
+        }
+
+        function getQualityClass(score) {
+            if (score >= 0.8) return 'excellent';
+            if (score >= 0.6) return 'good';
+            if (score >= 0.4) return 'fair';
+            return 'poor';
+        }
+
+        function getDifficultyColor(difficulty) {
+            switch(difficulty) {
+                case 'basic': return 'success';
+                case 'intermediate': return 'warning';
+                case 'advanced': return 'danger';
+                default: return 'secondary';
+            }
+        }
+
+        function filterFlashcards() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const qualityFilter = document.getElementById('quality-filter').value;
+            const difficultyFilter = document.getElementById('difficulty-filter').value;
+            const topicFilter = document.getElementById('topic-filter').value;
+            const needsReviewFilter = document.getElementById('needs-review-filter').checked;
+            const duplicatesFilter = document.getElementById('duplicates-filter').checked;
+
+            filteredFlashcards = flashcards.filter(flashcard => {
+                // Search filter
+                if (searchTerm && !flashcard.term.toLowerCase().includes(searchTerm) && 
+                    !flashcard.definition.toLowerCase().includes(searchTerm)) {
+                    return false;
+                }
+
+                // Quality filter
+                if (qualityFilter) {
+                    const score = flashcard.quality_score || 0;
+                    switch(qualityFilter) {
+                        case 'excellent': if (score < 0.8) return false; break;
+                        case 'good': if (score < 0.6 || score >= 0.8) return false; break;
+                        case 'fair': if (score < 0.4 || score >= 0.6) return false; break;
+                        case 'poor': if (score >= 0.4) return false; break;
+                    }
+                }
+
+                // Difficulty filter
+                if (difficultyFilter && flashcard.difficulty_level !== difficultyFilter) {
+                    return false;
+                }
+
+                // Topic filter
+                if (topicFilter && flashcard.topic !== topicFilter) {
+                    return false;
+                }
+
+                // Needs review filter
+                if (needsReviewFilter && !flashcard.needs_review) {
+                    return false;
+                }
+
+                // Duplicates filter
+                if (duplicatesFilter && !flashcard.is_duplicate) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            displayFlashcards();
+        }
+
+        function sortFlashcards() {
+            const sortBy = document.getElementById('sort-select').value;
+            
+            filteredFlashcards.sort((a, b) => {
+                switch(sortBy) {
+                    case 'quality':
+                        return (b.quality_score || 0) - (a.quality_score || 0);
+                    case 'difficulty':
+                        const difficultyOrder = { 'basic': 1, 'intermediate': 2, 'advanced': 3 };
+                        return difficultyOrder[a.difficulty_level] - difficultyOrder[b.difficulty_level];
+                    case 'topic':
+                        return a.topic.localeCompare(b.topic);
+                    case 'alphabetical':
+                        return a.term.localeCompare(b.term);
+                    default:
+                        return 0;
+                }
+            });
+
+            displayFlashcards();
+        }
+
+        function editFlashcard(index) {
+            currentEditIndex = index;
+            const flashcard = filteredFlashcards[index];
+            
+            document.getElementById('edit-term').value = flashcard.term;
+            document.getElementById('edit-definition').value = flashcard.definition;
+            document.getElementById('edit-difficulty').value = flashcard.difficulty_level;
+            document.getElementById('edit-topic').value = flashcard.topic;
+            document.getElementById('edit-quality').value = flashcard.quality_score || 0;
+            document.getElementById('edit-notes').value = flashcard.review_notes || '';
+            
+            const modal = new bootstrap.Modal(document.getElementById('editFlashcardModal'));
+            modal.show();
+        }
+
+        function saveFlashcardEdit() {
+            if (currentEditIndex === -1) return;
+            
+            const flashcard = filteredFlashcards[currentEditIndex];
+            flashcard.term = document.getElementById('edit-term').value;
+            flashcard.definition = document.getElementById('edit-definition').value;
+            flashcard.difficulty_level = document.getElementById('edit-difficulty').value;
+            flashcard.topic = document.getElementById('edit-topic').value;
+            flashcard.quality_score = parseFloat(document.getElementById('edit-quality').value);
+            flashcard.review_notes = document.getElementById('edit-notes').value;
+            
+            // Update the original flashcards array
+            const originalIndex = flashcards.findIndex(fc => fc.id === flashcard.id);
+            if (originalIndex !== -1) {
+                flashcards[originalIndex] = { ...flashcard };
+            }
+            
+            displayFlashcards();
+            
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editFlashcardModal'));
+            modal.hide();
+            
+            currentEditIndex = -1;
+        }
+
+        function deleteFlashcard(index) {
+            if (confirm('Are you sure you want to delete this flashcard?')) {
+                const flashcard = filteredFlashcards[index];
+                flashcards = flashcards.filter(fc => fc.id !== flashcard.id);
+                filteredFlashcards.splice(index, 1);
+                displayFlashcards();
+            }
+        }
+
+        function applyBulkOperation(operation) {
+            const selectedIds = Array.from(document.querySelectorAll('.flashcard-checkbox:checked'))
+                .map(checkbox => checkbox.value);
+            
+            if (selectedIds.length === 0) {
+                showAlert('Please select flashcards first', 'warning');
+                return;
+            }
+            
+            if (operation === 'delete') {
+                if (confirm(`Are you sure you want to delete ${selectedIds.length} flashcards?`)) {
+                    flashcards = flashcards.filter(fc => !selectedIds.includes(fc.id));
+                    filteredFlashcards = filteredFlashcards.filter(fc => !selectedIds.includes(fc.id));
+                    displayFlashcards();
+                }
+            } else if (operation === 'merge') {
+                if (selectedIds.length < 2) {
+                    showAlert('Please select at least 2 flashcards to merge', 'warning');
+                    return;
+                }
+                // Implement merge logic
+                showAlert('Merge functionality coming soon', 'info');
+            } else if (operation === 'improve_quality') {
+                // Implement quality improvement logic
+                showAlert('Quality improvement applied', 'success');
+            }
+        }
+
+        async function saveChanges() {
+            try {
+                const response = await fetch(`/api/flashcards/${lessonId}/review`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(flashcards)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(`Successfully saved ${result.saved_count} flashcards`, 'success');
+                } else {
+                    showAlert('Error saving flashcards', 'danger');
+                }
+            } catch (error) {
+                console.error('Error saving flashcards:', error);
+                showAlert('Error saving flashcards', 'danger');
+            }
+        }
+
+        function displaySuggestions(suggestions) {
+            const panel = document.getElementById('suggestions-panel');
+            const list = document.getElementById('suggestions-list');
+            
+            if (!suggestions || suggestions.length === 0) {
+                panel.style.display = 'none';
+                return;
+            }
+            
+            panel.style.display = 'block';
+            list.innerHTML = '';
+            
+            suggestions.forEach(suggestion => {
+                const item = document.createElement('div');
+                item.className = 'alert alert-info alert-sm';
+                item.innerHTML = `
+                    <strong>${suggestion.title}</strong><br>
+                    <small>${suggestion.description}</small>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.top = '20px';
+            alertDiv.style.right = '20px';
+            alertDiv.style.zIndex = '9999';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.remove();
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

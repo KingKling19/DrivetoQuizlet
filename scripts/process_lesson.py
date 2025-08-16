@@ -4,6 +4,7 @@ Lesson Processing System
 
 Automatically processes lessons based on available files (PowerPoint, notes, audio)
 and generates comprehensive Quizlet flashcards.
+Enhanced with cross-lesson context for better content correlation.
 """
 
 import argparse
@@ -13,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import pickle
 
 try:
     from dotenv import load_dotenv
@@ -30,8 +32,8 @@ except ImportError:
     sys.exit(1)
 
 class LessonProcessor:
-    def __init__(self):
-        """Initialize the lesson processor."""
+    def __init__(self, config_dir: Path = Path("config")):
+        """Initialize the lesson processor with cross-lesson context."""
         try:
             api_key = os.getenv('OPENAI_API_KEY')
             if api_key:
@@ -43,6 +45,128 @@ class LessonProcessor:
         except Exception as e:
             print(f"ERROR: Could not initialize OpenAI client: {e}", file=sys.stderr)
             sys.exit(1)
+        
+        # Cross-lesson context configuration
+        self.config_dir = Path(config_dir)
+        self.cross_lesson_data = self.load_cross_lesson_data()
+        
+        # Context enhancement configuration
+        self.context_config = {
+            "max_related_lessons": 3,
+            "context_weight_threshold": 0.3,
+            "max_context_length": 2000,
+            "include_prerequisites": True,
+            "include_related_concepts": True,
+            "enable_cross_lesson_enhancement": True
+        }
+    
+    def load_cross_lesson_data(self) -> Dict[str, Any]:
+        """Load cross-lesson analysis data for context enhancement."""
+        data = {
+            "content_index": {},
+            "semantic_embeddings": {},
+            "lesson_relationships": {},
+            "cross_references": {}
+        }
+        
+        try:
+            # Load content index
+            index_file = self.config_dir / "lesson_content_index.json"
+            if index_file.exists():
+                with open(index_file, 'r', encoding='utf-8') as f:
+                    data["content_index"] = json.load(f)
+            
+            # Load semantic embeddings
+            embeddings_file = self.config_dir / "semantic_embeddings.pkl"
+            if embeddings_file.exists():
+                with open(embeddings_file, 'rb') as f:
+                    data["semantic_embeddings"] = pickle.load(f)
+            
+            # Load lesson relationships
+            relationships_file = self.config_dir / "lesson_relationships_analysis.json"
+            if relationships_file.exists():
+                with open(relationships_file, 'r', encoding='utf-8') as f:
+                    data["lesson_relationships"] = json.load(f)
+            
+            # Load cross-references
+            cross_refs_file = self.config_dir / "cross_references.json"
+            if cross_refs_file.exists():
+                with open(cross_refs_file, 'r', encoding='utf-8') as f:
+                    data["cross_references"] = json.load(f)
+            
+            print(f"✓ Loaded cross-lesson data: {len(data['content_index'])} lessons indexed")
+            return data
+        except Exception as e:
+            print(f"⚠️  Could not load cross-lesson data: {e}")
+            return data
+    
+    def get_lesson_id_from_path(self, lesson_dir: Path) -> str:
+        """Extract lesson ID from lesson directory path."""
+        return lesson_dir.name
+    
+    def find_related_lessons(self, lesson_id: str, max_lessons: int = 3) -> List[Dict[str, Any]]:
+        """Find lessons related to the current lesson for context enhancement."""
+        related_lessons = []
+        
+        try:
+            relationships = self.cross_lesson_data.get("lesson_relationships", {})
+            lesson_rels = relationships.get(lesson_id, {})
+            
+            # Get related lessons - handle both old and new formats
+            related = lesson_rels.get("related_lessons", [])
+            
+            # If related_lessons is a list of strings (old format), convert to new format
+            if related and isinstance(related[0], str):
+                # Old format - convert to new format
+                related_lessons_new = []
+                for rel_id in related:
+                    similarity = lesson_rels.get("relationship_scores", {}).get(rel_id, 0.0)
+                    related_lessons_new.append({
+                        "lesson_id": rel_id,
+                        "similarity_score": similarity,
+                        "relationship_type": "related",
+                        "related_concepts": []
+                    })
+                related = related_lessons_new
+            
+            # Sort by similarity score
+            if related and isinstance(related[0], dict):
+                related.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
+            
+            # Take top related lessons
+            for rel in related[:max_lessons]:
+                if isinstance(rel, dict):
+                    related_lesson_id = rel.get("lesson_id")
+                    if related_lesson_id and related_lesson_id != lesson_id:
+                        related_lessons.append(rel)
+            
+            return related_lessons
+        except Exception as e:
+            print(f"⚠️  Error finding related lessons: {e}")
+            return []
+    
+    def get_context_enhancement_summary(self, lesson_id: str) -> Dict[str, Any]:
+        """Get summary of cross-lesson context enhancement for a lesson."""
+        if not self.context_config["enable_cross_lesson_enhancement"]:
+            return {"enabled": False, "reason": "Cross-lesson enhancement disabled"}
+        
+        related_lessons = self.find_related_lessons(lesson_id, self.context_config["max_related_lessons"])
+        
+        return {
+            "enabled": True,
+            "lesson_id": lesson_id,
+            "related_lessons_found": len(related_lessons),
+            "lessons_indexed": len(self.cross_lesson_data.get('content_index', {})),
+            "related_lessons": [
+                {
+                    "lesson_id": rel.get("lesson_id"),
+                    "similarity_score": rel.get("similarity_score", 0),
+                    "relationship_type": rel.get("relationship_type", "unknown")
+                }
+                for rel in related_lessons
+            ],
+            "context_config": self.context_config
+        }
     
     def scan_lesson_files(self, lesson_dir: Path) -> Dict[str, List[Path]]:
         """Scan lesson directory for available files."""
@@ -209,22 +333,34 @@ class LessonProcessor:
             except Exception as e:
                 print(f"WARNING: Could not load audio transcription: {e}")
         
+        # Get lesson ID and cross-lesson context
+        lesson_id = self.get_lesson_id_from_path(lesson_dir)
+        context_summary = self.get_context_enhancement_summary(lesson_id)
+        
         # Create comprehensive integration prompt
         integration_prompt = f"""
         You are a military training expert creating comprehensive flashcards for the Basic Officer Leader Course.
         
-        LESSON: {lesson_dir.name}
+        LESSON: {lesson_dir.name} (ID: {lesson_id})
         
         POWERPOINT FLASHCARDS: {len(powerpoint_flashcards)} cards
         NOTES AVAILABLE: {'Yes' if notes_data else 'No'}
         AUDIO AVAILABLE: {'Yes' if audio_data else 'No'}
+        CROSS-LESSON CONTEXT: {'Enabled' if context_summary.get('enabled') else 'Disabled'}
+        
+        CROSS-LESSON CONTEXT SUMMARY:
+        - Lessons indexed: {context_summary.get('lessons_indexed', 0)}
+        - Related lessons found: {context_summary.get('related_lessons_found', 0)}
+        - Related lessons: {', '.join([rel.get('lesson_id', '') for rel in context_summary.get('related_lessons', [])])}
         
         TASK: Create the most comprehensive and high-quality flashcards possible by:
         1. Using the PowerPoint flashcards as a foundation
         2. Adding insights from handwritten notes (if available)
         3. Incorporating audio lecture content (if available)
-        4. Ensuring military accuracy and test-focus
-        5. Creating clear, concise term-definition pairs
+        4. Using cross-lesson context to enhance understanding and avoid duplicates
+        5. Ensuring military accuracy and test-focus
+        6. Creating clear, concise term-definition pairs
+        7. Correlating concepts across related lessons for better comprehension
         
         REQUIREMENTS:
         - Focus on testable material
@@ -232,6 +368,8 @@ class LessonProcessor:
         - Emphasize key concepts and procedures
         - Use clear, military-appropriate language
         - Create 30-50 high-quality flashcards
+        - Leverage cross-lesson context to improve content quality
+        - Avoid duplicate definitions across related lessons
         
         Return ONLY a JSON array of flashcards with 'term' and 'definition' fields.
         """
@@ -275,15 +413,22 @@ class LessonProcessor:
                 definition = card.get('definition', '').replace('\t', ' ').replace('\n', ' ')
                 f.write(f"{term}\t{definition}\n")
         
-        # Save JSON with metadata
+        # Get lesson ID and cross-lesson context summary
+        lesson_id = self.get_lesson_id_from_path(lesson_dir)
+        context_summary = self.get_context_enhancement_summary(lesson_id)
+        
+        # Save JSON with metadata including cross-lesson context
         json_file = output_dir / f"{lesson_name}_flashcards.json"
         result = {
             "lesson_name": lesson_name,
+            "lesson_id": lesson_id,
             "total_flashcards": len(flashcards),
+            "cross_lesson_context": context_summary,
             "flashcards": flashcards,
             "processing_metadata": {
                 "timestamp": datetime.now().isoformat(),
-                "model_used": "gpt-4o-mini"
+                "model_used": "gpt-4o-mini",
+                "cross_lesson_enhancement": context_summary.get('enabled', False)
             }
         }
         
@@ -293,6 +438,9 @@ class LessonProcessor:
         print(f"✓ Final output saved to: {output_dir}")
         print(f"  - {tsv_file.name} (Ready for Quizlet import)")
         print(f"  - {json_file.name} (Complete data)")
+        print(f"  - Cross-lesson context: {'Enabled' if context_summary.get('enabled') else 'Disabled'}")
+        if context_summary.get('enabled'):
+            print(f"  - Related lessons: {context_summary.get('related_lessons_found', 0)} found")
         
         return tsv_file
     

@@ -27,10 +27,14 @@ except Exception as e:
     print(f"WARNING: Could not load .env file: {e}", file=sys.stderr)
 
 try:
-    import whisper
+    from faster_whisper import WhisperModel
+    whisper = None  # We'll use faster_whisper instead
 except ImportError:
-    print("ERROR: openai-whisper is required. pip install openai-whisper", file=sys.stderr)
-    sys.exit(1)
+    try:
+        import whisper
+    except ImportError:
+        print("ERROR: either faster-whisper or openai-whisper is required. pip install faster-whisper", file=sys.stderr)
+        sys.exit(1)
 
 try:
     from openai import OpenAI
@@ -94,6 +98,7 @@ class AudioProcessor:
         self.model_size = model_size
         self.use_gpu = use_gpu
         self.model = None
+        self.use_faster_whisper = False
         self.client = None
         
         # Check GPU availability
@@ -148,12 +153,22 @@ class AudioProcessor:
         
         try:
             # Transcribe with military context
-            result = self.model.transcribe(
-                str(audio_path),
-                language="en",
-                word_timestamps=True,
-                verbose=True
-            )
+            if hasattr(self, 'use_faster_whisper') and self.use_faster_whisper:
+                # Use faster_whisper
+                segments, info = self.model.transcribe(str(audio_path), language="en", word_timestamps=True)
+                result = {
+                    "text": " ".join([segment.text for segment in segments]),
+                    "segments": [{"text": segment.text, "start": segment.start, "end": segment.end} for segment in segments],
+                    "language": info.language
+                }
+            else:
+                # Use openai-whisper
+                result = self.model.transcribe(
+                    str(audio_path),
+                    language="en",
+                    word_timestamps=True,
+                    verbose=True
+                )
             
             transcription_time = time.time() - start_time
             print(f"✓ Transcription completed in {transcription_time:.2f} seconds")

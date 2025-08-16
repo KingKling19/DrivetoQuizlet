@@ -9,7 +9,7 @@ processing speeds, and resource usage.
 import time
 import psutil
 import threading
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 import json
 from datetime import datetime
@@ -98,34 +98,73 @@ class PerformanceMonitor:
         print(f"📈 {task_name} completed in {processing_time:.2f}s")
     
     def get_summary(self) -> Dict[str, Any]:
-        """Get a summary of all performance metrics."""
-        total_time = time.time() - self.start_time
-        
-        # Calculate averages
-        avg_memory = 0
-        if self.metrics["memory_usage"]:
-            avg_memory = sum(m["percent"] for m in self.metrics["memory_usage"]) / len(self.metrics["memory_usage"])
-        
-        avg_gpu_memory = 0
-        if self.metrics["gpu_usage"]:
-            avg_gpu_memory = sum(m["allocated_gb"] for m in self.metrics["gpu_usage"]) / len(self.metrics["gpu_usage"])
-        
+        """Get performance summary."""
         return {
-            "total_runtime": total_time,
-            "startup_time": self.metrics["startup_time"],
-            "model_loading_summary": {
-                model: data["load_time"] for model, data in self.metrics["model_loading_times"].items()
-            },
-            "processing_summary": {
-                task: data["processing_time"] for task, data in self.metrics["processing_times"].items()
-            },
-            "resource_usage": {
-                "avg_memory_percent": avg_memory,
-                "avg_gpu_memory_gb": avg_gpu_memory,
-                "peak_memory_percent": max(m["percent"] for m in self.metrics["memory_usage"]) if self.metrics["memory_usage"] else 0,
-                "peak_gpu_memory_gb": max(m["allocated_gb"] for m in self.metrics["gpu_usage"]) if self.metrics["gpu_usage"] else 0
-            },
-            "errors": len(self.metrics["errors"])
+            "uptime": time.time() - self.start_time,
+            "total_models": len(self.metrics["model_loading_times"]),
+            "total_tasks": len(self.metrics["processing_times"]),
+            "errors": len(self.metrics["errors"]),
+            "metrics": self.metrics
+        }
+    
+    def start_operation(self, operation_type: str, metadata: Dict[str, Any]):
+        """Start tracking an operation."""
+        operation_id = f"{operation_type}_{int(time.time())}"
+        self.metrics["processing_times"][operation_id] = {
+            "type": operation_type,
+            "start_time": time.time(),
+            "metadata": metadata,
+            "status": "running"
+        }
+        return operation_id
+    
+    def end_operation(self, operation_type: str, result: Dict[str, Any]):
+        """End tracking an operation."""
+        operation_id = f"{operation_type}_{int(time.time())}"
+        if operation_id in self.metrics["processing_times"]:
+            self.metrics["processing_times"][operation_id].update({
+                "end_time": time.time(),
+                "duration": time.time() - self.metrics["processing_times"][operation_id]["start_time"],
+                "result": result,
+                "status": "completed"
+            })
+    
+    def log_event(self, event_type: str, event_data: Dict[str, Any]):
+        """Log an event."""
+        event = {
+            "type": event_type,
+            "timestamp": time.time(),
+            "data": event_data
+        }
+        if "events" not in self.metrics:
+            self.metrics["events"] = []
+        self.metrics["events"].append(event)
+    
+    def get_active_operations(self) -> List[Dict[str, Any]]:
+        """Get currently active operations."""
+        active_ops = []
+        for op_id, op_data in self.metrics["processing_times"].items():
+            if op_data.get("status") == "running":
+                active_ops.append({
+                    "operation_id": op_id,
+                    **op_data
+                })
+        return active_ops
+    
+    def get_optimization_metrics(self, lesson_id: str) -> Dict[str, Any]:
+        """Get optimization metrics for a specific lesson."""
+        lesson_metrics = []
+        for op_id, op_data in self.metrics["processing_times"].items():
+            if (op_data.get("type") == "flashcard_optimization" and 
+                op_data.get("metadata", {}).get("lesson_id") == lesson_id):
+                lesson_metrics.append({
+                    "operation_id": op_id,
+                    **op_data
+                })
+        return {
+            "lesson_id": lesson_id,
+            "optimizations": lesson_metrics,
+            "total_optimizations": len(lesson_metrics)
         }
     
     def save_report(self, filename: str = None):

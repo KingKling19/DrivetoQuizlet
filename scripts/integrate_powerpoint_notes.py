@@ -4,6 +4,7 @@ PowerPoint + Notes Integration for Enhanced Quizlet Flashcards
 
 Combines PowerPoint content with handwritten notes insights to create
 high-quality, comprehensive flashcards for military training.
+Enhanced with cross-lesson context for better content correlation.
 """
 
 import argparse
@@ -13,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+import pickle
 
 try:
     from dotenv import load_dotenv
@@ -30,8 +32,8 @@ except ImportError:
     sys.exit(1)
 
 class PowerPointNotesIntegrator:
-    def __init__(self):
-        """Initialize the integrator with OpenAI client."""
+    def __init__(self, config_dir: Path = Path("config")):
+        """Initialize the integrator with OpenAI client and cross-lesson context."""
         try:
             api_key = os.getenv('OPENAI_API_KEY')
             if api_key:
@@ -43,6 +45,185 @@ class PowerPointNotesIntegrator:
         except Exception as e:
             print(f"ERROR: Could not initialize OpenAI client: {e}", file=sys.stderr)
             sys.exit(1)
+        
+        # Cross-lesson context configuration
+        self.config_dir = Path(config_dir)
+        self.cross_lesson_data = self.load_cross_lesson_data()
+        
+        # Context enhancement configuration
+        self.context_config = {
+            "max_related_lessons": 2,
+            "context_weight_threshold": 0.3,
+            "max_context_length": 1500,
+            "include_prerequisites": True,
+            "include_related_concepts": True
+        }
+    
+    def load_cross_lesson_data(self) -> Dict[str, Any]:
+        """Load cross-lesson analysis data for context enhancement."""
+        data = {
+            "content_index": {},
+            "semantic_embeddings": {},
+            "lesson_relationships": {},
+            "cross_references": {}
+        }
+        
+        try:
+            # Load content index
+            index_file = self.config_dir / "lesson_content_index.json"
+            if index_file.exists():
+                with open(index_file, 'r', encoding='utf-8') as f:
+                    data["content_index"] = json.load(f)
+            
+            # Load semantic embeddings
+            embeddings_file = self.config_dir / "semantic_embeddings.pkl"
+            if embeddings_file.exists():
+                with open(embeddings_file, 'rb') as f:
+                    data["semantic_embeddings"] = pickle.load(f)
+            
+            # Load lesson relationships
+            relationships_file = self.config_dir / "lesson_relationships_analysis.json"
+            if relationships_file.exists():
+                with open(relationships_file, 'r', encoding='utf-8') as f:
+                    data["lesson_relationships"] = json.load(f)
+            
+            # Load cross-references
+            cross_refs_file = self.config_dir / "cross_references.json"
+            if cross_refs_file.exists():
+                with open(cross_refs_file, 'r', encoding='utf-8') as f:
+                    data["cross_references"] = json.load(f)
+            
+            print(f"✓ Loaded cross-lesson data: {len(data['content_index'])} lessons indexed")
+            return data
+        except Exception as e:
+            print(f"⚠️  Could not load cross-lesson data: {e}")
+            return data
+    
+    def get_lesson_id_from_path(self, file_path: Path) -> str:
+        """Extract lesson ID from file path."""
+        # Try to find lesson directory in path
+        path_parts = file_path.parts
+        for i, part in enumerate(path_parts):
+            if part == "lessons" and i + 1 < len(path_parts):
+                return path_parts[i + 1]
+        
+        # Fallback: use filename without extension
+        return file_path.stem
+    
+    def find_related_lessons(self, lesson_id: str, max_lessons: int = 2) -> List[Dict[str, Any]]:
+        """Find lessons related to the current lesson for context enhancement."""
+        related_lessons = []
+        
+        try:
+            relationships = self.cross_lesson_data.get("lesson_relationships", {})
+            lesson_rels = relationships.get(lesson_id, {})
+            
+            # Get related lessons - handle both old and new formats
+            related = lesson_rels.get("related_lessons", [])
+            
+            # If related_lessons is a list of strings (old format), convert to new format
+            if related and isinstance(related[0], str):
+                # Old format - convert to new format
+                related_lessons_new = []
+                for rel_id in related:
+                    similarity = lesson_rels.get("relationship_scores", {}).get(rel_id, 0.0)
+                    related_lessons_new.append({
+                        "lesson_id": rel_id,
+                        "similarity_score": similarity,
+                        "relationship_type": "related",
+                        "related_concepts": []
+                    })
+                related = related_lessons_new
+            
+            # Sort by similarity score
+            if related and isinstance(related[0], dict):
+                related.sort(key=lambda x: x.get("similarity_score", 0), reverse=True)
+            
+            # Take top related lessons
+            for rel in related[:max_lessons]:
+                if isinstance(rel, dict):
+                    related_lesson_id = rel.get("lesson_id")
+                    if related_lesson_id and related_lesson_id != lesson_id:
+                        related_lessons.append(rel)
+            
+            return related_lessons
+        except Exception as e:
+            print(f"⚠️  Error finding related lessons: {e}")
+            return []
+    
+    def extract_related_context(self, related_lessons: List[Dict[str, Any]]) -> str:
+        """Extract relevant context from related lessons."""
+        context_parts = []
+        
+        try:
+            content_index = self.cross_lesson_data.get("content_index", {})
+            
+            for rel in related_lessons:
+                if not isinstance(rel, dict):
+                    continue
+                    
+                lesson_id = rel.get("lesson_id")
+                similarity_score = rel.get("similarity_score", 0)
+                related_concepts = rel.get("related_concepts", [])
+                
+                if lesson_id in content_index:
+                    lesson_data = content_index[lesson_id]
+                    if not isinstance(lesson_data, dict):
+                        continue
+                        
+                    lesson_name = lesson_data.get("lesson_name", lesson_id)
+                    
+                    # Add lesson header
+                    context_parts.append(f"## Related Lesson: {lesson_name} (Similarity: {similarity_score:.2f})")
+                    
+                    # Add key concepts
+                    if related_concepts and isinstance(related_concepts, list):
+                        context_parts.append("### Key Related Concepts:")
+                        for concept in related_concepts[:3]:  # Limit to top 3 concepts
+                            context_parts.append(f"- {concept}")
+                    
+                    # Add content snippets from presentations
+                    content_sources = lesson_data.get("content_sources", {})
+                    if isinstance(content_sources, dict):
+                        presentations = content_sources.get("presentations", {})
+                        if isinstance(presentations, dict):
+                            for pptx_name, pptx_data in list(presentations.items())[:1]:  # Limit to 1 presentation
+                                if isinstance(pptx_data, dict):
+                                    slides = pptx_data.get("slides", [])
+                                    if isinstance(slides, list):
+                                        for slide in slides[:2]:  # Limit to 2 slides per presentation
+                                            if isinstance(slide, dict):
+                                                title = slide.get("title", "")
+                                                body = slide.get("body", "")
+                                                if title and body:
+                                                    context_parts.append(f"### {title}")
+                                                    context_parts.append(body[:200] + "..." if len(body) > 200 else body)
+                    
+                    context_parts.append("")  # Spacer
+            
+            context = "\n".join(context_parts)
+            
+            # Limit total context length
+            if len(context) > self.context_config["max_context_length"]:
+                context = context[:self.context_config["max_context_length"]] + "..."
+            
+            return context
+        except Exception as e:
+            print(f"⚠️  Error extracting related context: {e}")
+            return ""
+    
+    def enhance_with_cross_lesson_context(self, lesson_id: str) -> str:
+        """Enhance content with cross-lesson context."""
+        try:
+            related_lessons = self.find_related_lessons(lesson_id, self.context_config["max_related_lessons"])
+            
+            if not related_lessons:
+                return ""
+            
+            return self.extract_related_context(related_lessons)
+        except Exception as e:
+            print(f"⚠️  Error enhancing with cross-lesson context: {e}")
+            return ""
     
     def load_powerpoint_flashcards(self, quizlet_file: Path) -> List[Dict[str, str]]:
         """Load existing PowerPoint flashcards from Quizlet export."""
@@ -83,19 +264,26 @@ class PowerPointNotesIntegrator:
             print(f"ERROR loading notes analysis: {e}", file=sys.stderr)
             return {}
     
-    def enhance_flashcards_with_notes(self, flashcards: List[Dict], notes_data: Dict) -> List[Dict]:
-        """Enhance PowerPoint flashcards with notes insights."""
+    def enhance_flashcards_with_notes(self, flashcards: List[Dict], notes_data: Dict, lesson_id: str = "") -> List[Dict]:
+        """Enhance PowerPoint flashcards with notes insights and cross-lesson context."""
         if not notes_data:
             print("WARNING: No notes data available, returning original flashcards")
             return flashcards
         
-        print("Enhancing flashcards with notes insights...")
+        print("Enhancing flashcards with notes insights and cross-lesson context...")
         
         # Prepare context for enhancement
         notes_text = ""
         for filename, result in notes_data.get('results', {}).items():
             notes_text += f"\n--- {filename} ---\n"
             notes_text += result.get('enhanced_text', '')
+        
+        # Get cross-lesson context if available
+        cross_lesson_context = ""
+        if lesson_id:
+            cross_lesson_context = self.enhance_with_cross_lesson_context(lesson_id)
+            if cross_lesson_context:
+                print(f"✓ Enhanced with cross-lesson context from {len(self.cross_lesson_data.get('content_index', {}))} lessons")
         
         # Create enhancement prompt
         enhancement_prompt = f"""
@@ -114,12 +302,17 @@ class PowerPointNotesIntegrator:
         EXISTING POWERPOINT FLASHCARDS:
         {json.dumps(flashcards[:10], indent=2)}  # Show first 10 for context
         
+        CROSS-LESSON CONTEXT:
+        {cross_lesson_context if cross_lesson_context else "No cross-lesson context available"}
+        
         TASK: Enhance these flashcards by:
         1. Adding missing key concepts from the handwritten notes
-        2. Improving definitions with notes context
+        2. Improving definitions with notes context and cross-lesson insights
         3. Adding new flashcards for important notes-only content
         4. Ensuring military accuracy and test-focus
         5. Incorporating any additional insights from student notes
+        6. Using cross-lesson context to avoid duplicate definitions and enhance understanding
+        7. Correlating concepts across related lessons for better comprehension
         
         Return ONLY a JSON array of enhanced flashcards with 'term' and 'definition' fields.
         """
@@ -176,13 +369,18 @@ class PowerPointNotesIntegrator:
         
         notes_data = self.load_notes_analysis(notes_file)
         
-        # Enhance flashcards with notes
-        enhanced_flashcards = self.enhance_flashcards_with_notes(flashcards, notes_data)
+        # Get lesson ID for cross-lesson context
+        lesson_id = self.get_lesson_id_from_path(powerpoint_file)
+        print(f"📚 Processing lesson: {lesson_id}")
+        
+        # Enhance flashcards with notes and cross-lesson context
+        enhanced_flashcards = self.enhance_flashcards_with_notes(flashcards, notes_data, lesson_id)
         
         # Create comprehensive result
         result = {
             "source_powerpoint": powerpoint_file.name,
             "source_notes": notes_folder.name,
+            "lesson_id": lesson_id,
             "lesson_topic": "Perform Effectively In An Operational Environment",
             "original_flashcards": len(flashcards),
             "enhanced_flashcards": len(enhanced_flashcards),
@@ -191,10 +389,16 @@ class PowerPointNotesIntegrator:
                 "average_confidence": notes_data.get('average_confidence', 0),
                 "total_words": notes_data.get('total_words', 0)
             },
+            "cross_lesson_context": {
+                "lessons_indexed": len(self.cross_lesson_data.get('content_index', {})),
+                "related_lessons_found": len(self.find_related_lessons(lesson_id)),
+                "context_enabled": bool(self.cross_lesson_data.get('content_index'))
+            },
             "flashcards": enhanced_flashcards,
             "processing_metadata": {
                 "timestamp": datetime.now().isoformat(),
-                "model_used": "gpt-4o-mini"
+                "model_used": "gpt-4o-mini",
+                "cross_lesson_enhancement": True
             }
         }
         

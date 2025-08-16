@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DriveToQuizlet Enhanced Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .quizlet-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-healthy { background-color: #dcfce7; color: #166534; }
+        .status-degraded { background-color: #fef3c7; color: #92400e; }
+        .status-error { background-color: #fee2e2; color: #991b1b; }
+        .status-pending { background-color: #fef3c7; color: #92400e; }
+        .status-processing { background-color: #dbeafe; color: #1e40af; }
+        .status-ready { background-color: #d1fae5; color: #065f46; }
+        
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .progress-bar {
+            background-color: #e5e7eb;
+            border-radius: 9999px;
+            height: 8px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="quizlet-gradient text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <i class="fas fa-brain text-3xl"></i>
+                    <h1 class="text-2xl font-bold">DriveToQuizlet Enhanced Dashboard</h1>
+                    <span class="text-sm bg-white bg-opacity-20 px-2 py-1 rounded">v2.0.0</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div id="systemHealth" class="flex items-center space-x-2">
+                        <div class="loading-spinner"></div>
+                        <span class="text-sm">Checking system...</span>
+                    </div>
+                    <button id="refreshBtn" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        <!-- System Status Overview -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-blue-100 text-blue-600">
+                        <i class="fas fa-server text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">System Health</p>
+                        <p class="text-lg font-bold text-gray-900" id="systemStatus">Checking...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-green-100 text-green-600">
+                        <i class="fas fa-graduation-cap text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Active Lessons</p>
+                        <p class="text-2xl font-bold text-gray-900" id="lessonCount">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-purple-100 text-purple-600">
+                        <i class="fas fa-download text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">Pending Files</p>
+                        <p class="text-2xl font-bold text-gray-900" id="pendingCount">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-yellow-100 text-yellow-600">
+                        <i class="fas fa-microchip text-xl"></i>
+                    </div>
+                    <div class="ml-4">
+                        <p class="text-sm font-medium text-gray-600">CPU Usage</p>
+                        <p class="text-2xl font-bold text-gray-900" id="cpuUsage">0%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Resources -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Memory Usage -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-memory mr-2 text-blue-600"></i>
+                    Memory Usage
+                </h3>
+                <div class="space-y-3">
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span>RAM</span>
+                            <span id="memoryPercent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="memoryBar" style="width: 0%"></div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            <span id="memoryUsed">0 GB</span> / <span id="memoryTotal">0 GB</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span>GPU Memory</span>
+                            <span id="gpuMemoryPercent">N/A</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="gpuMemoryBar" style="width: 0%"></div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1" id="gpuMemoryInfo">
+                            GPU not available
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Disk Usage -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-hdd mr-2 text-green-600"></i>
+                    Disk Usage
+                </h3>
+                <div class="space-y-3">
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span>Storage</span>
+                            <span id="diskPercent">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="diskBar" style="width: 0%"></div>
+                        </div>
+                        <div class="text-xs text-gray-500 mt-1">
+                            <span id="diskUsed">0 GB</span> / <span id="diskTotal">0 GB</span>
+                        </div>
+                    </div>
+                    <div class="text-sm">
+                        <div class="flex justify-between">
+                            <span>Lessons Data:</span>
+                            <span id="lessonsSize">0 MB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-tachometer-alt mr-2 text-purple-600"></i>
+                    Performance
+                </h3>
+                <div class="space-y-3">
+                    <div class="text-sm">
+                        <div class="flex justify-between">
+                            <span>Uptime:</span>
+                            <span id="uptime">0s</span>
+                        </div>
+                    </div>
+                    <div class="text-sm">
+                        <div class="flex justify-between">
+                            <span>Last Scan:</span>
+                            <span id="lastScan">Never</span>
+                        </div>
+                    </div>
+                    <div class="text-sm">
+                        <div class="flex justify-between">
+                            <span>Active Processes:</span>
+                            <span id="activeProcesses">0</span>
+                        </div>
+                    </div>
+                    <div class="text-sm">
+                        <div class="flex justify-between">
+                            <span>Model Cache:</span>
+                            <span id="modelCache">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h3 class="text-lg font-semibold mb-4 flex items-center">
+                <i class="fas fa-bolt mr-2 text-yellow-600"></i>
+                Quick Actions
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <button id="scanDriveBtn" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                    <i class="fas fa-sync-alt mr-2"></i>Scan Drive
+                </button>
+                <button id="processQueueBtn" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                    <i class="fas fa-play mr-2"></i>Process Queue
+                </button>
+                <button id="processAllBtn" class="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors">
+                    <i class="fas fa-cogs mr-2"></i>Process All
+                </button>
+                <button id="testConnectionBtn" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                    <i class="fas fa-wifi mr-2"></i>Test Connection
+                </button>
+                <button id="clearCacheBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                    <i class="fas fa-trash mr-2"></i>Clear Cache
+                </button>
+                <button id="performanceTestBtn" class="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors">
+                    <i class="fas fa-chart-line mr-2"></i>Performance Test
+                </button>
+            </div>
+        </div>
+
+        <!-- Lessons Management -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold flex items-center">
+                    <i class="fas fa-book mr-2 text-blue-600"></i>
+                    Lessons Management
+                </h3>
+                <button id="refreshLessonsBtn" class="text-blue-600 hover:text-blue-800">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <div id="lessonsContainer" class="space-y-4">
+                <div class="text-center text-gray-500">
+                    <div class="loading-spinner mx-auto mb-2"></div>
+                    Loading lessons...
+                </div>
+            </div>
+        </div>
+
+        <!-- Drive Status -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h3 class="text-lg font-semibold mb-4 flex items-center">
+                <i class="fas fa-cloud mr-2 text-green-600"></i>
+                Google Drive Status
+            </h3>
+            <div id="driveStatus" class="space-y-4">
+                <div class="text-center text-gray-500">
+                    <div class="loading-spinner mx-auto mb-2"></div>
+                    Loading drive status...
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Error Logs -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-exclamation-triangle mr-2 text-red-600"></i>
+                    Recent Errors
+                </h3>
+                <div id="errorLogs" class="space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-center text-gray-500">
+                        <div class="loading-spinner mx-auto mb-2"></div>
+                        Loading error logs...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Processes -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-spinner mr-2 text-blue-600"></i>
+                    Active Processes
+                </h3>
+                <div id="activeProcessesList" class="space-y-2 max-h-64 overflow-y-auto">
+                    <div class="text-center text-gray-500">
+                        <div class="loading-spinner mx-auto mb-2"></div>
+                        Loading active processes...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Command Results -->
+    <div id="commandModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-hidden">
+                <div class="flex items-center justify-between p-4 border-b">
+                    <h3 class="text-lg font-semibold" id="modalTitle">Command Result</h3>
+                    <button id="closeModal" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-4 overflow-y-auto max-h-64">
+                    <pre id="modalContent" class="text-sm bg-gray-100 p-3 rounded"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let refreshInterval;
+        let systemData = {};
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAllData();
+            setupEventListeners();
+            startAutoRefresh();
+        });
+
+        function setupEventListeners() {
+            // Refresh button
+            document.getElementById('refreshBtn').addEventListener('click', loadAllData);
+            
+            // Quick action buttons
+            document.getElementById('scanDriveBtn').addEventListener('click', () => executeCommand('scan-drive'));
+            document.getElementById('processQueueBtn').addEventListener('click', () => executeCommand('process-queue'));
+            document.getElementById('processAllBtn').addEventListener('click', () => executeCommand('process-all-lessons'));
+            document.getElementById('testConnectionBtn').addEventListener('click', () => executeCommand('test-connection'));
+            document.getElementById('clearCacheBtn').addEventListener('click', () => executeCommand('clear-cache'));
+            document.getElementById('performanceTestBtn').addEventListener('click', () => executeCommand('performance-test'));
+            
+            // Lessons refresh
+            document.getElementById('refreshLessonsBtn').addEventListener('click', loadLessons);
+            
+            // Modal close
+            document.getElementById('closeModal').addEventListener('click', () => {
+                document.getElementById('commandModal').classList.add('hidden');
+            });
+        }
+
+        function startAutoRefresh() {
+            refreshInterval = setInterval(loadSystemStatus, 10000); // Refresh every 10 seconds
+        }
+
+        async function loadAllData() {
+            await Promise.all([
+                loadSystemStatus(),
+                loadLessons(),
+                loadDriveStatus(),
+                loadErrorLogs(),
+                loadActiveProcesses()
+            ]);
+        }
+
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch('/api/system/status');
+                const data = await response.json();
+                systemData = data;
+                
+                updateSystemOverview(data);
+                updateResourceUsage(data.system);
+                updatePerformanceMetrics(data);
+                
+            } catch (error) {
+                console.error('Error loading system status:', error);
+            }
+        }
+
+        function updateSystemOverview(data) {
+            // System health
+            const healthStatus = data.system?.error ? 'Error' : 'Healthy';
+            document.getElementById('systemStatus').textContent = healthStatus;
+            document.getElementById('systemHealth').innerHTML = `
+                <div class="w-3 h-3 rounded-full ${healthStatus === 'Healthy' ? 'bg-green-500' : 'bg-red-500'}"></div>
+                <span class="text-sm">${healthStatus}</span>
+            `;
+            
+            // Lesson count
+            document.getElementById('lessonCount').textContent = data.lessons?.length || 0;
+            
+            // Pending files
+            document.getElementById('pendingCount').textContent = data.drive?.pending_files || 0;
+            
+            // CPU usage
+            document.getElementById('cpuUsage').textContent = `${data.system?.cpu_percent || 0}%`;
+        }
+
+        function updateResourceUsage(systemData) {
+            if (!systemData) return;
+            
+            // Memory
+            const memory = systemData.memory;
+            if (memory) {
+                const percent = memory.percent || 0;
+                document.getElementById('memoryPercent').textContent = `${percent.toFixed(1)}%`;
+                document.getElementById('memoryBar').style.width = `${percent}%`;
+                document.getElementById('memoryUsed').textContent = `${memory.used_gb?.toFixed(1) || 0} GB`;
+                document.getElementById('memoryTotal').textContent = `${memory.total_gb?.toFixed(1) || 0} GB`;
+            }
+            
+            // GPU Memory
+            const gpu = systemData.gpu;
+            if (gpu && gpu.available) {
+                const percent = (gpu.memory_allocated / gpu.memory_reserved) * 100 || 0;
+                document.getElementById('gpuMemoryPercent').textContent = `${percent.toFixed(1)}%`;
+                document.getElementById('gpuMemoryBar').style.width = `${percent}%`;
+                document.getElementById('gpuMemoryInfo').textContent = `${gpu.memory_allocated?.toFixed(2) || 0} GB / ${gpu.memory_reserved?.toFixed(2) || 0} GB`;
+            } else {
+                document.getElementById('gpuMemoryPercent').textContent = 'N/A';
+                document.getElementById('gpuMemoryBar').style.width = '0%';
+                document.getElementById('gpuMemoryInfo').textContent = 'GPU not available';
+            }
+            
+            // Disk
+            const disk = systemData.disk;
+            if (disk) {
+                const percent = disk.percent || 0;
+                document.getElementById('diskPercent').textContent = `${percent.toFixed(1)}%`;
+                document.getElementById('diskBar').style.width = `${percent}%`;
+                document.getElementById('diskUsed').textContent = `${disk.used_gb?.toFixed(1) || 0} GB`;
+                document.getElementById('diskTotal').textContent = `${disk.total_gb?.toFixed(1) || 0} GB`;
+            }
+        }
+
+        function updatePerformanceMetrics(data) {
+            // Uptime
+            const uptime = data.system?.uptime || 0;
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            document.getElementById('uptime').textContent = `${hours}h ${minutes}m`;
+            
+            // Last scan
+            const lastScan = data.dashboard?.last_scan;
+            if (lastScan) {
+                const date = new Date(lastScan);
+                document.getElementById('lastScan').textContent = date.toLocaleString();
+            } else {
+                document.getElementById('lastScan').textContent = 'Never';
+            }
+            
+            // Active processes
+            const activeProcesses = data.dashboard?.active_processes?.length || 0;
+            document.getElementById('activeProcesses').textContent = activeProcesses;
+            
+            // Model cache
+            const modelCache = data.models?.total_cached || 0;
+            document.getElementById('modelCache').textContent = modelCache;
+        }
+
+        async function loadLessons() {
+            try {
+                const response = await fetch('/api/lessons');
+                const data = await response.json();
+                
+                const container = document.getElementById('lessonsContainer');
+                if (data.lessons && data.lessons.length > 0) {
+                    container.innerHTML = data.lessons.map(lesson => `
+                        <div class="border rounded-lg p-4 hover:bg-gray-50">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h4 class="font-semibold">${lesson.name}</h4>
+                                    <div class="text-sm text-gray-600 mt-1">
+                                        <span class="mr-4">📊 ${lesson.files.presentations} presentations</span>
+                                        <span class="mr-4">📝 ${lesson.files.notes} notes</span>
+                                        <span class="mr-4">🎵 ${lesson.files.audio} audio</span>
+                                        <span class="mr-4">📁 ${lesson.files.processed} processed</span>
+                                        <span>📄 ${lesson.files.output} output</span>
+                                    </div>
+                                    <div class="text-xs text-gray-500 mt-1">
+                                        Size: ${lesson.total_size_mb.toFixed(1)} MB | 
+                                        Modified: ${new Date(lesson.last_modified).toLocaleDateString()}
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="status-badge status-${lesson.status}">${lesson.status}</span>
+                                    ${lesson.has_output ? `
+                                        <button onclick="downloadLesson('${lesson.name}')" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
+                                            <i class="fas fa-download mr-1"></i>Download
+                                        </button>
+                                    ` : ''}
+                                    <button onclick="processLesson('${lesson.name}')" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
+                                        <i class="fas fa-play mr-1"></i>Process
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="text-center text-gray-500">No lessons found</div>';
+                }
+            } catch (error) {
+                console.error('Error loading lessons:', error);
+                document.getElementById('lessonsContainer').innerHTML = '<div class="text-center text-red-500">Error loading lessons</div>';
+            }
+        }
+
+        async function loadDriveStatus() {
+            try {
+                const response = await fetch('/api/drive/status');
+                const data = await response.json();
+                
+                const container = document.getElementById('driveStatus');
+                container.innerHTML = `
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-blue-600">${data.pending_files}</div>
+                            <div class="text-sm text-gray-600">Pending Files</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-green-600">${data.downloaded_files}</div>
+                            <div class="text-sm text-gray-600">Downloaded Files</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-purple-600">${data.config.folders ? Object.keys(data.config.folders).length : 0}</div>
+                            <div class="text-sm text-gray-600">Configured Folders</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-bold text-yellow-600">${data.config.check_interval || 1}h</div>
+                            <div class="text-sm text-gray-600">Scan Interval</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-600">
+                        <div class="flex justify-between">
+                            <span>Auto Download:</span>
+                            <span class="${data.config.auto_download ? 'text-green-600' : 'text-red-600'}">
+                                ${data.config.auto_download ? 'Enabled' : 'Disabled'}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Last Scan:</span>
+                            <span>${data.last_scan ? new Date(data.last_scan).toLocaleString() : 'Never'}</span>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading drive status:', error);
+                document.getElementById('driveStatus').innerHTML = '<div class="text-center text-red-500">Error loading drive status</div>';
+            }
+        }
+
+        async function loadErrorLogs() {
+            try {
+                const response = await fetch('/api/logs/errors');
+                const data = await response.json();
+                
+                const container = document.getElementById('errorLogs');
+                if (data.errors && data.errors.length > 0) {
+                    container.innerHTML = data.errors.slice(-5).map(error => `
+                        <div class="text-sm text-red-600 bg-red-50 p-2 rounded">
+                            <div class="font-medium">${error}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="text-center text-green-600">No errors</div>';
+                }
+            } catch (error) {
+                console.error('Error loading error logs:', error);
+                document.getElementById('errorLogs').innerHTML = '<div class="text-center text-red-500">Error loading logs</div>';
+            }
+        }
+
+        async function loadActiveProcesses() {
+            try {
+                const response = await fetch('/api/logs/active-processes');
+                const data = await response.json();
+                
+                const container = document.getElementById('activeProcessesList');
+                if (data.active_processes && data.active_processes.length > 0) {
+                    container.innerHTML = data.active_processes.map(process => `
+                        <div class="text-sm bg-blue-50 p-2 rounded">
+                            <div class="font-medium text-blue-800">${process}</div>
+                            <div class="text-blue-600">Running...</div>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="text-center text-gray-500">No active processes</div>';
+                }
+            } catch (error) {
+                console.error('Error loading active processes:', error);
+                document.getElementById('activeProcessesList').innerHTML = '<div class="text-center text-red-500">Error loading processes</div>';
+            }
+        }
+
+        async function executeCommand(command) {
+            try {
+                const button = event.target.closest('button');
+                const originalText = button.innerHTML;
+                button.innerHTML = '<div class="loading-spinner inline-block mr-2"></div>Executing...';
+                button.disabled = true;
+                
+                const response = await fetch(`/api/commands/${command}`, { method: 'POST' });
+                const result = await response.json();
+                
+                showModal(`Command: ${command}`, JSON.stringify(result, null, 2));
+                
+            } catch (error) {
+                showModal(`Command: ${command}`, `Error: ${error.message}`);
+            } finally {
+                const button = event.target.closest('button');
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+
+        async function processLesson(lessonName) {
+            try {
+                const response = await fetch(`/api/lessons/${lessonName}/process`, { method: 'POST' });
+                const result = await response.json();
+                
+                showModal(`Process Lesson: ${lessonName}`, JSON.stringify(result, null, 2));
+                
+                // Refresh lessons after processing
+                setTimeout(loadLessons, 2000);
+                
+            } catch (error) {
+                showModal(`Process Lesson: ${lessonName}`, `Error: ${error.message}`);
+            }
+        }
+
+        async function downloadLesson(lessonName) {
+            try {
+                window.open(`/api/lessons/${lessonName}/download`, '_blank');
+            } catch (error) {
+                console.error('Error downloading lesson:', error);
+            }
+        }
+
+        function showModal(title, content) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalContent').textContent = content;
+            document.getElementById('commandModal').classList.remove('hidden');
+        }
+
+        // Auto-refresh system status every 10 seconds
+        setInterval(loadSystemStatus, 10000);
+    </script>
+</body>
+</html>
