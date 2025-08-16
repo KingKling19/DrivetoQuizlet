@@ -76,7 +76,7 @@ def organize_existing_files(lesson_name: str, base_dir: Path = Path("downloads")
     
     # Use optimized file copying for better performance
     try:
-        from optimized_file_operations import copy_lesson_files_optimized
+        from src.analysis.optimized_file_operations import copy_lesson_files_optimized
         results = copy_lesson_files_optimized(lesson_name, base_dir)
         
         # Update moved_files based on results

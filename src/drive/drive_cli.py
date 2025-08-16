@@ -9,7 +9,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
-from drive_automation import DriveAutomation
+from src.drive.drive_automation import DriveAutomation
 
 def print_banner():
     """Print application banner"""

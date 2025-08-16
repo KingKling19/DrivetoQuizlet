@@ -216,7 +216,7 @@ class LessonProcessor:
         
         # Import the PowerPoint conversion function
         try:
-            from convert_folder_to_quizlet import convert_folder_to_quizlet
+            from src.processing.convert_folder_to_quizlet import convert_folder_to_quizlet
             output_dir = lesson_dir / "processed"
             output_dir.mkdir(exist_ok=True)
             
@@ -241,7 +241,7 @@ class LessonProcessor:
         print("Processing handwritten notes...")
         
         try:
-            from notes_processor import NotesProcessor
+            from src.processing.notes_processor import NotesProcessor
             
             processor = NotesProcessor(use_gpu=True)
             notes_dir = lesson_dir / "notes"
@@ -269,7 +269,7 @@ class LessonProcessor:
         print("Processing audio files...")
         
         try:
-            from audio_processor import AudioProcessor
+            from src.processing.audio_processor import AudioProcessor
             
             processor = AudioProcessor(model_size="base", use_gpu=True)
             output_dir = lesson_dir / "processed"

@@ -25,10 +25,10 @@ import asyncio
 
 # Import DriveToQuizlet modules
 try:
-    from drive_automation import DriveAutomation
-    from model_manager import model_manager
-    from performance_monitor import performance_monitor
-    from optimized_file_operations import file_ops
+    from src.drive.drive_automation import DriveAutomation
+    from src.data.model_manager import model_manager
+    from src.analysis.performance_monitor import performance_monitor
+    from src.analysis.optimized_file_operations import file_ops
 except ImportError as e:
     print(f"Warning: Could not import some modules: {e}")
 
@@ -590,7 +590,7 @@ async def get_performance_logs():
 async def get_flashcard_optimization_suggestions(lesson_id: str):
     """Get optimization suggestions for flashcards with enhanced integration"""
     try:
-        from flashcard_review_interface import FlashcardReviewInterface
+        from src.web.flashcard_review_interface import FlashcardReviewInterface
         
         lesson_path = f"lessons/{lesson_id}"
         if not os.path.exists(lesson_path):
@@ -602,7 +602,7 @@ async def get_flashcard_optimization_suggestions(lesson_id: str):
         # Get cross-lesson context information if available
         cross_lesson_info = {}
         try:
-            from cross_lesson_analyzer import CrossLessonAnalyzer
+            from src.data.cross_lesson_analyzer import CrossLessonAnalyzer
             analyzer = CrossLessonAnalyzer()
             related_lessons = analyzer.get_related_lessons(lesson_id, max_lessons=5)
             if related_lessons:
@@ -644,7 +644,7 @@ async def get_flashcard_optimization_suggestions(lesson_id: str):
 async def apply_flashcard_optimization(lesson_id: str, operations: List[Dict[str, Any]]):
     """Apply optimization operations to flashcards with enhanced tracking"""
     try:
-        from flashcard_review_interface import FlashcardReviewInterface
+        from src.web.flashcard_review_interface import FlashcardReviewInterface
         
         lesson_path = f"lessons/{lesson_id}"
         if not os.path.exists(lesson_path):
@@ -747,7 +747,7 @@ async def get_optimization_progress(lesson_id: str):
 async def load_flashcards_for_review(lesson_id: str):
     """Load flashcards for manual review with enhanced metadata"""
     try:
-        from flashcard_review_interface import FlashcardReviewInterface
+        from src.web.flashcard_review_interface import FlashcardReviewInterface
         
         lesson_path = f"lessons/{lesson_id}"
         if not os.path.exists(lesson_path):
@@ -779,7 +779,7 @@ async def load_flashcards_for_review(lesson_id: str):
 async def save_reviewed_flashcards(lesson_id: str, flashcards: List[Dict[str, Any]]):
     """Save reviewed flashcards with enhanced tracking"""
     try:
-        from flashcard_review_interface import FlashcardReviewInterface
+        from src.web.flashcard_review_interface import FlashcardReviewInterface
         
         lesson_path = f"lessons/{lesson_id}"
         if not os.path.exists(lesson_path):
@@ -808,7 +808,7 @@ async def save_reviewed_flashcards(lesson_id: str, flashcards: List[Dict[str, An
 async def get_flashcard_clusters(lesson_id: str):
     """Get clustering analysis for flashcards with enhanced metadata"""
     try:
-        from flashcard_review_interface import FlashcardReviewInterface
+        from src.web.flashcard_review_interface import FlashcardReviewInterface
         
         lesson_path = f"lessons/{lesson_id}"
         if not os.path.exists(lesson_path):
@@ -836,7 +836,7 @@ async def get_flashcard_clusters(lesson_id: str):
 async def get_flashcard_statistics(lesson_id: str):
     """Get comprehensive flashcard statistics with integration metrics"""
     try:
-        from flashcard_review_interface import FlashcardReviewInterface
+        from src.web.flashcard_review_interface import FlashcardReviewInterface
         
         lesson_path = f"lessons/{lesson_id}"
         if not os.path.exists(lesson_path):
@@ -854,7 +854,7 @@ async def get_flashcard_statistics(lesson_id: str):
                 integration_stats['optimization_metrics'] = performance_monitor.get_optimization_metrics(lesson_id)
             
             # Get cross-lesson context statistics
-            from cross_lesson_analyzer import CrossLessonAnalyzer
+            from src.data.cross_lesson_analyzer import CrossLessonAnalyzer
             analyzer = CrossLessonAnalyzer()
             related_lessons = analyzer.get_related_lessons(lesson_id, max_lessons=10)
             integration_stats['cross_lesson_context'] = {

@@ -12,7 +12,7 @@ import io
 import re
 from typing import Dict, List, Optional, Tuple
 import threading
-from scripts.optimized_file_operations import file_ops
+from src.analysis.optimized_file_operations import file_ops
 
 class DriveAutomation:
     def __init__(self):

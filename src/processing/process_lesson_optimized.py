@@ -49,7 +49,7 @@ class OptimizedLessonProcessor:
         print("🚀 Initializing AI models in background...")
         
         try:
-            from model_manager import model_manager
+            from src.data.model_manager import model_manager
             
             # Start background preloading
             self.whisper_thread, self.ocr_thread = model_manager.preload_models(
@@ -146,7 +146,7 @@ class OptimizedLessonProcessor:
         print(f"📝 Processing {len(files['notes'])} note files...")
         
         try:
-            from notes_processor import NotesProcessor
+            from src.processing.notes_processor import NotesProcessor
             
             processor = NotesProcessor(use_gpu=self.use_gpu)
             notes_dir = self.lesson_dir / "notes"
@@ -188,7 +188,7 @@ class OptimizedLessonProcessor:
         print(f"🎵 Processing {len(files['audio'])} audio files...")
         
         try:
-            from audio_processor import AudioProcessor
+            from src.processing.audio_processor import AudioProcessor
             
             processor = AudioProcessor(model_size="base", use_gpu=self.use_gpu)
             output_dir = self.lesson_dir / "processed"
