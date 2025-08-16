@@ -23,6 +23,12 @@
             border-radius: 9999px;
             font-size: 0.75rem;
             font-weight: 600;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            max-width: 120px;
+            display: inline-block;
+            text-align: center;
         }
         .status-healthy { background-color: #dcfce7; color: #166534; }
         .status-degraded { background-color: #fef3c7; color: #92400e; }
@@ -60,19 +66,21 @@
 <body class="bg-gray-50">
     <!-- Header -->
     <header class="quizlet-gradient text-white shadow-lg">
-        <div class="container mx-auto px-6 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
-                    <i class="fas fa-brain text-3xl"></i>
-                    <h1 class="text-2xl font-bold">DriveToQuizlet Enhanced Dashboard</h1>
-                    <span class="text-sm bg-white bg-opacity-20 px-2 py-1 rounded">v2.0.0</span>
+        <div class="container mx-auto px-4 sm:px-6 py-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                <div class="flex items-center space-x-2 sm:space-x-4 min-w-0">
+                    <i class="fas fa-brain text-2xl sm:text-3xl flex-shrink-0"></i>
+                    <div class="min-w-0">
+                        <h1 class="text-lg sm:text-2xl font-bold break-words">DriveToQuizlet Enhanced Dashboard</h1>
+                        <span class="text-xs sm:text-sm bg-white bg-opacity-20 px-2 py-1 rounded inline-block mt-1 sm:mt-0">v2.0.0</span>
+                    </div>
                 </div>
-                <div class="flex items-center space-x-4">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
                     <div id="systemHealth" class="flex items-center space-x-2">
                         <div class="loading-spinner"></div>
                         <span class="text-sm">Checking system...</span>
                     </div>
-                    <button id="refreshBtn" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
+                    <button id="refreshBtn" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors whitespace-nowrap flex items-center">
                         <i class="fas fa-sync-alt mr-2"></i>Refresh
                     </button>
                 </div>
@@ -238,23 +246,23 @@
                 <i class="fas fa-bolt mr-2 text-yellow-600"></i>
                 Quick Actions
             </h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <button id="scanDriveBtn" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <button id="scanDriveBtn" class="bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 transition-colors whitespace-nowrap flex items-center justify-center">
                     <i class="fas fa-sync-alt mr-2"></i>Scan Drive
                 </button>
-                <button id="processQueueBtn" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                <button id="processQueueBtn" class="bg-green-500 text-white px-4 py-3 rounded-lg hover:bg-green-600 transition-colors whitespace-nowrap flex items-center justify-center">
                     <i class="fas fa-play mr-2"></i>Process Queue
                 </button>
-                <button id="processAllBtn" class="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors">
+                <button id="processAllBtn" class="bg-purple-500 text-white px-4 py-3 rounded-lg hover:bg-purple-600 transition-colors whitespace-nowrap flex items-center justify-center">
                     <i class="fas fa-cogs mr-2"></i>Process All
                 </button>
-                <button id="testConnectionBtn" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                <button id="testConnectionBtn" class="bg-yellow-500 text-white px-4 py-3 rounded-lg hover:bg-yellow-600 transition-colors whitespace-nowrap flex items-center justify-center">
                     <i class="fas fa-wifi mr-2"></i>Test Connection
                 </button>
-                <button id="clearCacheBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                <button id="clearCacheBtn" class="bg-red-500 text-white px-4 py-3 rounded-lg hover:bg-red-600 transition-colors whitespace-nowrap flex items-center justify-center">
                     <i class="fas fa-trash mr-2"></i>Clear Cache
                 </button>
-                <button id="performanceTestBtn" class="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors">
+                <button id="performanceTestBtn" class="bg-indigo-500 text-white px-4 py-3 rounded-lg hover:bg-indigo-600 transition-colors whitespace-nowrap flex items-center justify-center">
                     <i class="fas fa-chart-line mr-2"></i>Performance Test
                 </button>
             </div>
@@ -494,31 +502,33 @@
                 if (data.lessons && data.lessons.length > 0) {
                     container.innerHTML = data.lessons.map(lesson => `
                         <div class="border rounded-lg p-4 hover:bg-gray-50">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h4 class="font-semibold">${lesson.name}</h4>
-                                    <div class="text-sm text-gray-600 mt-1">
-                                        <span class="mr-4">📊 ${lesson.files.presentations} presentations</span>
-                                        <span class="mr-4">📝 ${lesson.files.notes} notes</span>
-                                        <span class="mr-4">🎵 ${lesson.files.audio} audio</span>
-                                        <span class="mr-4">📁 ${lesson.files.processed} processed</span>
-                                        <span>📄 ${lesson.files.output} output</span>
+                            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-3 lg:space-y-0">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-semibold break-words text-gray-900" title="${lesson.name}">${lesson.name}</h4>
+                                    <div class="text-sm text-gray-600 mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                                        <span class="flex items-center">📊 ${lesson.files.presentations} presentations</span>
+                                        <span class="flex items-center">📝 ${lesson.files.notes} notes</span>
+                                        <span class="flex items-center">🎵 ${lesson.files.audio} audio</span>
+                                        <span class="flex items-center">📁 ${lesson.files.processed} processed</span>
+                                        <span class="flex items-center">📄 ${lesson.files.output} output</span>
                                     </div>
-                                    <div class="text-xs text-gray-500 mt-1">
-                                        Size: ${lesson.total_size_mb.toFixed(1)} MB | 
-                                        Modified: ${new Date(lesson.last_modified).toLocaleDateString()}
+                                    <div class="text-xs text-gray-500 mt-2 space-y-1">
+                                        <div>Size: ${lesson.total_size_mb.toFixed(1)} MB</div>
+                                        <div>Modified: ${new Date(lesson.last_modified).toLocaleDateString()}</div>
                                     </div>
                                 </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="status-badge status-${lesson.status}">${lesson.status}</span>
-                                    ${lesson.has_output ? `
-                                        <button onclick="downloadLesson('${lesson.name}')" class="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">
-                                            <i class="fas fa-download mr-1"></i>Download
+                                <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 flex-shrink-0">
+                                    <span class="status-badge status-${lesson.status}" title="${lesson.status}">${lesson.status}</span>
+                                    <div class="flex space-x-2">
+                                        ${lesson.has_output ? `
+                                            <button onclick="downloadLesson('${lesson.name}')" class="bg-green-500 text-white px-3 py-2 rounded text-sm hover:bg-green-600 whitespace-nowrap flex items-center">
+                                                <i class="fas fa-download mr-1"></i>Download
+                                            </button>
+                                        ` : ''}
+                                        <button onclick="processLesson('${lesson.name}')" class="bg-blue-500 text-white px-3 py-2 rounded text-sm hover:bg-blue-600 whitespace-nowrap flex items-center">
+                                            <i class="fas fa-play mr-1"></i>Process
                                         </button>
-                                    ` : ''}
-                                    <button onclick="processLesson('${lesson.name}')" class="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600">
-                                        <i class="fas fa-play mr-1"></i>Process
-                                    </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
